@@ -113,3 +113,51 @@ Reviewer: general-purpose subagent.
 **무해/확인 완료:** 8, 10–13.
 
 반박: 없음.
+
+---
+
+## S06 — 2026-06-16
+
+Reviewer: general-purpose subagent.
+
+### 원문 요약
+
+**Verdict:** Pass with notes. 마이그레이션 코드 구조·PRD §3 필드 정합 모두 OK. 3개 AC는 모두 사용자 검증 필요(`docker compose up` 실행 환경). 수정 필요: smoke test가 health만 확인하고 rule 미검증, 다수 number 필드의 정수 제약 누락, `is_send`/`project_name`의 PRD-null 의도와 PB 표현 불일치 명시 필요.
+
+**Findings:**
+
+1. **[minor] /dev/pb-check가 health만, collection probe 부재** — AC3 "sample fetch"가 broken rule/CORS를 못 잡음. `pb.collection("sessions").getList(1,1)` 추가 → 비인증 401/403을 "rule 정상" 신호로 표시.
+
+2. **[minor] 정수 필드에 `noDecimal: true` 누락** — `total_time_mins`, 통증 0–3 4종, `hold_size_mm`, `success_sets/total_sets/*_hang_seconds`, `rpe`, `attempts`, `reps`, `sets`. PRD 의도는 정수. weight_kg는 소수 허용 유지.
+
+3. **[minor] `climbing_logs.is_send`는 PB에서 unset → `false`, PRD의 "Lead일 때 null" 표현 불가능** — 스키마 한계. 코드 측에서 `type === "Lead"`일 때 ignore. 주석으로 명시.
+
+4. **[minor] `climbing_logs.project_name` unset → `""`** — 클라이언트는 `!== ""`로 판별. 주석으로 명시.
+
+5. **[minor] sessions에 date 인덱스만 — `(date, location)` 등 추가 불필요** — MVP 충분.
+
+6. **[minor] PocketBase 바이너리 SHA256 미검증** — 공급망 강화 optional.
+
+7. **[nit] pb_data bind mount UID mismatch (Linux 호스트)** — Mac 무관. S13에서 처리.
+
+8. **[minor] PB 기본 CORS 허용(`*`)** — S06 dev는 OK. S13 운영에서 whitelist 필요. README에 TODO 명시.
+
+9. **[minor] createRule 단일 사용자 가정** — 다중 사용자 확장 시 `owner` relation 필요. 마이그레이션 주석에 가정 명시됨, 충분.
+
+10–18. **[nit/pass]** 헬스체크 wget OK, randomUUID SSR safe, SDK 0.27/server 0.22 skew 사용 surface는 안정, PRD §3 필드 5개 컬렉션 모두 일치, v0.22 migration API(`Dao`, `schema:`, `cascadeDelete`) 모두 정확, UNIQUE index/FK index 정상.
+
+### 본인 판단
+
+**즉시 수용 (S06 commit 전 처리):** 1, 2, 3, 4, 8
+
+- 1: pb-check에 sessions probe 추가 + 401/403을 "rule 정상" 신호로 UI.
+- 2: 정수 필드 15개에 `noDecimal: true` 추가.
+- 3: 마이그레이션 주석으로 PRD-null vs PB-false 차이 명시.
+- 4: 마이그레이션 주석으로 PRD-null vs PB-empty-string 차이 명시.
+- 8: README의 "프로덕션 (S13)" 절에 CORS whitelist + USER + SHA256 + 백업 TODO 일괄 명시.
+
+**Skip:** 5 (MVP 충분), 6 (PB releases가 SHA256SUMS 형식 미공개 — 추가 시 build broken 위험), 7 (Linux prod 영역 = S13), 9 (현재 가정 충분).
+
+**무해/확인 완료:** 10–18.
+
+반박: 없음.

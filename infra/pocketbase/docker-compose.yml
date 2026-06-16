@@ -1,0 +1,29 @@
+# Climb-Forge PocketBase — 로컬 개발 환경 (ADR-1, ADR-2)
+#
+# 실행:   docker compose up
+# 빌드:   docker compose up --build
+# 정지:   docker compose down
+# 초기화: docker compose down -v && rm -rf pb_data
+#
+# 운영 환경은 S13에서 추가 compose 파일(예: docker-compose.prod.yml)로 Caddy 결합.
+
+services:
+  pocketbase:
+    build:
+      context: .
+      args:
+        PB_VERSION: 0.22.21
+    image: climb-forge-pocketbase:0.22.21
+    container_name: climb-forge-pb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./pb_data:/pb_data
+      - ./pb_migrations:/pb_migrations:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8090/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

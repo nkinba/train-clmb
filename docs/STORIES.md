@@ -68,7 +68,7 @@
 - [ ] 텍스트 대비 AA 이상 (Comet MCP로 9개 핵심 조합 실측 — design-tokens.md §1.10)
 - [ ] focus ring이 키보드 탐색 시 모든 인터랙티브 요소에 표시
 
-### S06 — PocketBase 셋업 + 스키마 ⬜
+### S06 — PocketBase 셋업 + 스키마 ✅
 **Goal:** 로컬 PocketBase + 컬렉션 정의 + JS SDK 연동.
 **Dependencies:** S01
 **Tasks:**

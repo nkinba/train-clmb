@@ -101,3 +101,52 @@
   - 검증 후 본 history에 결과 한 줄 추가
 - S08에서 Sheet·Chip·Form 레이아웃 컴포넌트 추가 (S05 scope 밖이었음).
 
+## S06 — 2026-06-16
+**변경 파일:**
+- `infra/pocketbase/Dockerfile` (신규) — alpine 멀티스테이지, TARGETARCH 분기로 amd64/arm64 자동 선택, PB v0.22.21 핀, `/api/health` healthcheck
+- `infra/pocketbase/docker-compose.yml` (신규) — 단일 서비스, `127.0.0.1:8090`만 노출, `pb_migrations`는 read-only 마운트
+- `infra/pocketbase/.gitignore` (신규) — `pb_data/` 차단 (admin 비밀·SQLite 보호)
+- `infra/pocketbase/pb_migrations/1750000001_initial_schema.js` (신규) — 5 컬렉션 + 인덱스 + rule. v0.22 Dao API.
+- `infra/pocketbase/README.md` (신규) — 빠른 시작, admin/유저 생성, 초기화, S13/S14 영역 명시
+- `web/src/lib/pb.ts` (신규) — pb 싱글톤, `Collections` 상수, `newClientId()`
+- `web/.env.local.example` (신규) — `NEXT_PUBLIC_PB_URL`
+- `web/src/app/dev/pb-check/page.tsx` (신규) — health + 비인증 sessions probe(rule 작동 확인)
+- `web/package.json` — pocketbase 0.27.0 추가
+- `docs/review/phase-1.md` — S06 리뷰 + 본인 판단
+- `docs/STORIES.md` — S06 ✅
+- `docs/history/phase-1.md` — 본 엔트리
+
+**주요 결정:**
+- **PocketBase v0.22.21 핀** — 안정 0.22 series 마지막. v0.23+로 가면 마이그레이션 API가 `Dao` → `app`으로 breaking change. 본 마이그레이션은 v0.22 한정.
+- **PocketBase JS SDK v0.27** — 서버 0.22와 major version skew지만 health/CRUD/auth surface는 호환. 추후 SDK 업그레이드 시 audit 필요.
+- **단일 마이그레이션 파일로 5 컬렉션 + 인덱스 + rule** 통합. 자식 컬렉션의 `session_id` relation은 `dao.findCollectionByNameOrId("sessions").id`로 해결.
+- **모든 컬렉션에 `client_id` UNIQUE 인덱스** — ADR-4 오프라인 큐 멱등 재전송 보장. 클라이언트는 `newClientId()` (crypto.randomUUID) 발급 후 mutation.
+- **rule 단일 정책 `@request.auth.id != ''`** — ADR-5 단일 사용자. 다중 사용자 확장 시 `owner` relation 필요(코드 주석).
+- **PRD-null vs PB 표현 차이 명시** — `is_send` (bool은 false/true만 → Lead 시 ignore), `project_name` (text는 unset = "" → `!== ""`로 판별). 마이그레이션 주석 + 본 history에 박음.
+- **정수 필드는 `noDecimal: true`** — rpe/attempts/reps/sets/통증/seconds/mm 모두. weight_kg는 소수 허용.
+- **pb_data bind mount 사용** — Mac Docker Desktop 환경 가정. Linux 운영(S13)에서 USER 비-root + 권한 정렬 필요.
+- **포트 `127.0.0.1`만 바인딩** — 로컬 외부 노출 차단. 운영은 Caddy 경유만(S13).
+
+**Review 처리:** finding 18건 중:
+- 즉시 수용 5건: pb-check probe 추가, noDecimal: true 일괄, is_send/project_name 주석, README 프로덕션 TODO 일괄
+- Skip 4건: MVP 충분 / 공급망(SHA256 파일 미공개) / Linux UID(S13) / 단일 사용자 rule 가정
+- 무해·pass 9건
+- 상세는 `docs/review/phase-1.md`
+
+**다음 Story 영향:**
+- **S07 (인증):** `users` 컬렉션은 PocketBase 기본 제공, 본 마이그레이션이 건드리지 않음. 클라이언트에서 `pb.collection("users").authWithPassword()` 호출 + `pb.authStore` 활용.
+- **S08–S11 (모듈):** `newClientId()` 호출 후 mutation. 모든 record 저장 시 client_id 동봉.
+- **S09 (행보드):** `hangboard_logs`의 `actual_hang_seconds`로 실패 시 실제 버틴 초 기록. RPE는 세트 종합 종료 시 입력.
+- **S10 (등반):** Lead는 `is_send` 무시, Bouldering은 사용. `project_name`은 자동완성 (직전 세션 동일 이름 우선) + `!== ""` 판별.
+- **S12 (오프라인 큐):** record 저장 실패 시 IndexedDB 보관, online 복귀 시 동일 client_id로 재전송 → 서버 409(UNIQUE 충돌) = 멱등 처리.
+- **S13 (운영):** Caddy + CORS + USER + SHA256 + 백업. README 명시.
+
+**Follow-up:**
+- 사용자 검증 (CLAUDE.md "브라우저 검증" + docker):
+  - `cd infra/pocketbase && docker compose up --build` → 빌드 성공·헬스 200 확인
+  - `http://localhost:8090/_/` admin 생성 → users 컬렉션에 일반 유저 1명 생성
+  - `cp web/.env.local.example web/.env.local`
+  - `cd web && pnpm dev` → `http://localhost:3000/dev/pb-check`에서 health ✓ + rule probe 401/403 ✓
+  - `docker compose down && docker compose up`으로 마이그레이션 idempotent 확인 (재실행 시 변경 없음)
+- 결과를 본 history에 ✅ 한 줄 추가, fail 시 fix Story 생성.
+

@@ -1,0 +1,3 @@
+# PocketBase 런타임 데이터 — 절대 commit 금지
+# 관리자 비밀, SQLite DB, 업로드 파일이 포함됨. 백업은 ADR-6에 따라 R2로.
+pb_data/
