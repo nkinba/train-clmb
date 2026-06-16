@@ -16,7 +16,7 @@
 **Goal:** plan에서 결정된 보강 결정을 ADR로 기록.
 **완료 상태:** ADR-4(PWA/오프라인 동기화), ADR-5(CORS/JWT 인증), ADR-6(R2 백업), ADR-7(인터벌 타이머 안정성 Wake Lock/Audio/Vibration), ADR-8(GCP region us-west1) 추가 완료. 본 워크플로우 도입 전 작업이라 review 파일은 없음.
 
-### S03 — 디자인 토큰 + Stitch 프롬프트 ⬜
+### S03 — 디자인 토큰 + Stitch 프롬프트 ✅
 **Goal:** UI.md의 결정·와이어프레임을 기반으로 디자인 토큰을 문서화하고, Stitch에 넣을 화면별 prompt를 작성한다. (Visual mock 생성은 사용자가 Stitch에서 직접 수행.)
 **Dependencies:** S01, S02 (둘 다 ✅)
 **Tasks:**
@@ -57,14 +57,16 @@
 **Goal:** S03 토큰을 Tailwind config로 옮기고, 다크 모드 + 하단 탭 네비 컴포넌트 작성.
 **Dependencies:** S03, S04
 **Tasks:**
-- `tailwind.config.ts`에 디자인 토큰 반영
+- `tailwind.config.ts`에 디자인 토큰 반영 (S03 design-tokens.md §10의 전체 매핑 copy-paste)
 - 다크 모드 기본 (class strategy, 시스템 prefers-color-scheme)
-- `<BottomNav>` 컴포넌트 (4개 모듈 + 대시보드 자리)
-- `<NumberStepper>`, `<TimerDisplay>` 등 공통 컴포넌트
+- `<BottomNav>` 컴포넌트 — 4 탭: 오늘 / 기록 / 분석 / 설정 (모듈 선택은 오늘 탭 내부 카드)
+- `<NumberStepper>`, `<TimerDisplay>`, 통증 0–3 셀렉터, RPE 4-band 셀렉터 등 공통 컴포넌트
 - 스토리북은 도입하지 않음 (오버헤드 큼) — `/dev/components` 라우트로 대신
+- `prefers-reduced-motion: reduce` 글로벌 CSS 처리
 **Acceptance Criteria:**
 - [ ] 모바일 뷰포트(390×844)에서 BottomNav 엄지 zone 내 위치
-- [ ] 텍스트 대비 WCAG AAA (Comet MCP로 확인)
+- [ ] 텍스트 대비 AA 이상 (Comet MCP로 9개 핵심 조합 실측 — design-tokens.md §1.10)
+- [ ] focus ring이 키보드 탐색 시 모든 인터랙티브 요소에 표시
 
 ### S06 — PocketBase 셋업 + 스키마 ⬜
 **Goal:** 로컬 PocketBase + 컬렉션 정의 + JS SDK 연동.
