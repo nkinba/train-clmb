@@ -247,7 +247,7 @@ PB schema에는 cross-field validator가 없어 클라이언트에서만 검증.
 
 ---
 
-## S12 — 2026-06-17 (commit <pending>)
+## S12 — 2026-06-17 (commit 366bac0)
 
 ### 변경 파일 요약
 - `web/package.json`, `web/pnpm-lock.yaml` — `idb-keyval@6.2.5` 추가.
