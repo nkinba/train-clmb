@@ -130,7 +130,7 @@ PRD §3은 모호하지만 §5 성공 지표 "주간 행보드 총 매달리기 
 
 ---
 
-## S10 — 2026-06-17 (commit <pending>)
+## S10 — 2026-06-17 (commit b88350c)
 
 ### 변경 파일 요약
 - `web/src/lib/climbing.ts` *(신규)* — 타입 + create mutation + 세션별 list query + Lead/Bouldering 그레이드 상수.
