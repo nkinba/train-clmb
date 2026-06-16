@@ -38,7 +38,7 @@
 
 ## Phase 1 — 인프라·스캐폴딩
 
-### S04 — 프론트엔드 부트스트랩 ⬜
+### S04 — 프론트엔드 부트스트랩 ✅
 **Goal:** Next.js (App Router, static export) + Tailwind + shadcn/ui + 기본 PWA 셋업.
 **Dependencies:** S03
 **Tasks:**
