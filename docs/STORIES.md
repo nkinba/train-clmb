@@ -81,15 +81,15 @@
 - [ ] 마이그레이션 재실행 가능 (idempotent)
 - [ ] 프론트에서 sample fetch 동작
 
-### S07 — 인증 ⬜
-**Goal:** 1인 admin 로그인 + 보호 라우트.
-**Dependencies:** S06
+### S07 — 인증 ✅
+**Goal:** 1인 user 로그인 + 보호 라우트. (admin은 PB 자체 admin UI 사용, 프론트는 일반 user auth만.)
+**Dependencies:** S06 ✅
 **Tasks:**
-- PocketBase admin 계정 1개
-- 컬렉션 rule: 인증 user만 CRUD
-- 프론트엔드 `/login` 페이지
-- `<AuthGuard>` 래퍼 (미인증 시 `/login` 리다이렉트)
-- 로그인 상태 IndexedDB 영속화
+- 프론트엔드 `/login` 페이지 (이메일/비번 폼, `pb.collection("users").authWithPassword`)
+- `<AuthGuard>` 래퍼 (미인증 시 `/login` 리다이렉트, FOUC 방지용 로딩 상태)
+- `<LogoutButton>` 컴포넌트 (`pb.authStore.clear` + `/login`로 replace)
+- 보호 라우트는 `(protected)` route group으로 묶고 그룹 layout에 AuthGuard 적용
+- 로그인 상태는 SDK 기본 LocalAuthStore(localStorage) — ADR-5와 일치 (STORIES.md 옛 표현 "IndexedDB"는 ADR-5의 localStorage로 정정)
 **Acceptance Criteria:**
 - [ ] 로그인 → 메인 라우트 접근 가능
 - [ ] 로그아웃 시 즉시 보호 라우트 차단

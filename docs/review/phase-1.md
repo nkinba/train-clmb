@@ -161,3 +161,53 @@ Reviewer: general-purpose subagent.
 **무해/확인 완료:** 10–18.
 
 반박: 없음.
+
+---
+
+## S07 — 2026-06-17
+
+Reviewer: general-purpose subagent.
+
+### 원문 요약
+
+**Verdict:** Pass with notes. AuthGuard·login·logout 구조 모두 idiomatic + static export 호환. 실제 버그 2건: (1) AuthGuard subscription이 unmount 후 setState 가능, (2) 다른 탭의 logout이 동기화 안 됨. 둘 다 minor + 짧은 fix. S08+ 차단 없음.
+
+**Findings:**
+
+1. **[minor] AuthGuard state-set-after-unmount** — `onChange` 콜백이 unmount 후 fire되면 setState 경고. 실제 비용 ~0(라우트 그룹 layout에 mount되어 거의 unmount 안 함)이지만 hygiene.
+
+2. **[minor] cross-tab logout 미동기화** — PB `LocalAuthStore`는 `storage` 이벤트 자체 발행 안 함. tab A에서 logout해도 tab B는 401 받기 전까지 보호 페이지 유지. PWA + tab 동시 시나리오에서 실제 발생. `window.addEventListener("storage", ...)` 10줄로 해결.
+
+3. **[minor] login page: 이미 로그인된 사용자 진입 시 폼 flash** — `useEffect` 전 1프레임 form 렌더. AuthGuard처럼 loading state 미러링으로 해결.
+
+4. **[minor] LoginPage onSubmit unmount race** — `authWithPassword` 중 navigate → setState after unmount. `mountedRef` 패턴 또는 AbortController.
+
+5. **[nit] Settings 페이지 미니멀** — 로그인 이메일·앱 버전 표시 없음. S07 scope 밖, S08+로 queue.
+
+6. **[nit] BottomNav 페이지별 import 반복** — layout에 끌어올리면 dedupe 가능하지만 `activeId` prop이 사라짐(usePathname 파생 필요). 현재 패턴 OK.
+
+7. **[nit] error message 표면** — PB가 generic "Failed to authenticate."로 마스킹. 추가 leak 없음.
+
+**확인된 사항 (pass):**
+- 하이드레이션 패턴 정상 (deterministic loading start)
+- onChange unsubscribe 시그니처 정확 (`(): () => void`)
+- route group + server layout + client AuthGuard 패턴 v16 valid
+- URL 경로 변동 없음 (build output 검증)
+- 옛 비-그룹 라우트 완전 제거
+- static export 4 sub-point 모두 호환
+- 3rd-party script 없음 → ADR-5의 localStorage XSS 위험 가정 유지
+- 만료 토큰: `isValid` exp 체크로 redirect
+- `/dev/pb-check` 보호 그룹 밖 → 회귀 없음
+
+### 본인 판단
+
+**즉시 수용 (S07 commit 전 처리):** 1, 2, 3, 4
+
+- 1+2: AuthGuard에 `cancelled` flag + `storage` 이벤트 리스너 + cleanup. 한 useEffect로 통합.
+- 3+4: LoginPage에 `checkedAuth` 상태 추가(false일 때 spinner만), `mountedRef` ref로 비동기 콜백 가드.
+
+**Defer:** 5 (S08+ 자연스러운 시점).
+
+**Skip:** 6, 7 (현재 패턴 충분).
+
+반박: 없음.

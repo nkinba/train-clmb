@@ -150,3 +150,71 @@
   - `docker compose down && docker compose up`으로 마이그레이션 idempotent 확인 (재실행 시 변경 없음)
 - 결과를 본 history에 ✅ 한 줄 추가, fail 시 fix Story 생성.
 
+### 검증 결과 — 2026-06-17 ✅
+
+사용자 환경(macOS + Docker Desktop)에서 검증 완료. PB 띄움·admin 생성·user 생성·마이그레이션 적용·rule 작동 모두 정상. 검증 과정에서 `/dev/pb-check` probe 로직 결함 3건 발견·수정 (follow-up commits 아래).
+
+### Follow-up commits — pb-check probe 정정
+
+검증 도중 probe가 "rule 우회됨" false alarm을 띄움. 진단·수정 3단계:
+
+1. **`d9ef7a9` — fix(pb-check): list는 filter라 gate 아님 — create probe로 교체**
+   - 발견: list rule이 set이고 비인증이면 200 + totalItems=0이 정상 (rule은 SQL WHERE 절에 더해지는 filter이지 401/403 gate가 아님). 이전 probe는 이를 "rule 우회됨"으로 잘못 표시.
+   - 수정: list probe를 정보용으로 강등, create probe(실제 gate) 추가.
+
+2. **`b4f3ec1` — fix(pb-check): create probe payload·error detail 확장**
+   - 발견: 최소 payload(`client_id`+`date`)로는 PB가 validation 우선 평가 시 rule 도달 전 400. 어느 필드가 막혔는지 보이지 않음.
+   - 수정: full ISO datetime + 모든 schema 통과용 필드 채움. err.response.data를 UI에 노출.
+
+3. **`a7a3780` — fix(pb-check): PB v0.22의 "400 + empty data" = rule 거부로 인식**
+   - 발견: 사용자 보고 — 400 + `data:{}` + PB 로그 `DrySubmit create rule failure: sql: no rows in result set`. PB v0.22의 DrySubmit이 createRule을 SQL dry-run으로 평가하며 거부 시 **403이 아니라 400 + 빈 data**로 응답.
+   - 수정: 400 + empty data → "rule 정상 거부"로 인식. 400 + field-level errors → 진짜 validation 실패. 두 경우를 UI에서 구분.
+
+### 핵심 학습 (다른 Story에 적용)
+
+- **PocketBase list rule은 SQL filter이지 HTTP gate가 아님.** "비인증인데 200이 옴" ≠ "rule 우회됨". list만으로는 rule 작동 판단 불가 — create/update/delete 같은 mutating 호출로 확인.
+- **PB v0.22는 createRule 거부를 400 + empty data로 표현** (403 아님). 서버 로그 `DrySubmit ... rule failure: sql: no rows in result set`이 동반. S08+ mutation 호출의 error handling에서 이 케이스를 "auth required"로 매핑할 것 (또는 SDK 상위 wrapper에서 normalize).
+- **probe·smoke test는 minimal payload를 보내지 말 것.** PB는 validation 우선 → rule 도달 전 400으로 끝나 진단 불가. 항상 schema 통과할 완전한 payload + error detail surface.
+
+## S07 — 2026-06-17
+**변경 파일:**
+- `web/src/components/auth-guard.tsx` (신규) — 클라이언트 보호 wrapper. `loading→auth/redirecting` state machine. `pb.authStore.onChange` + `storage` 이벤트(cross-tab) + `cancelled` flag로 mount race 보호
+- `web/src/components/logout-button.tsx` (신규) — `pb.authStore.clear` + `/login/`로 replace
+- `web/src/app/login/page.tsx` (신규) — 이메일/비번 폼, `pb.collection("users").authWithPassword`. `checkedAuth` 게이팅으로 폼 flash 회피, `mountedRef`로 비동기 콜백 unmount race 가드
+- `web/src/app/(protected)/layout.tsx` (신규) — route group layout이 AuthGuard wrap
+- `web/src/app/(protected)/page.tsx`, `(protected)/{logs,analysis,settings}/page.tsx` — 옛 비-그룹 라우트에서 이동. URL은 그대로(`/`, `/logs/`, `/analysis/`, `/settings/`)
+- `web/src/app/(protected)/settings/page.tsx` — LogoutButton 포함한 "계정" 섹션 추가
+- 삭제: `web/src/app/page.tsx`, `web/src/app/{logs,analysis,settings}/page.tsx`, 빈 디렉토리
+- `docs/STORIES.md` — S07 ✅, task 설명에 ADR-5와 정합(IndexedDB→localStorage) 정정
+- `docs/review/phase-1.md` — S07 리뷰 + 본인 판단
+- `docs/history/phase-1.md` — 본 엔트리
+
+**주요 결정:**
+- **route group `(protected)`로 묶음** — `/`, `/logs/`, `/analysis/`, `/settings/`가 한 layout 안에서 AuthGuard 공유. URL 경로는 영향 없음. `/login/`, `/dev/*`는 그룹 밖이라 비보호.
+- **AuthGuard는 클라이언트 hydration 후에만 판단** — SSR/static render에서는 항상 "loading"로 시작 → hydration mismatch 회피. 정적 산출물(`out/`)의 보호 페이지 HTML은 spinner만 포함.
+- **STORIES.md 옛 task 표현 "IndexedDB 영속화" 정정** — ADR-5는 `JWT를 localStorage에 저장` 명시. SDK 기본 `LocalAuthStore`가 localStorage 사용. IndexedDB 미사용.
+- **cross-tab logout 동기화** — PB SDK는 `storage` 이벤트 자체 발행 안 함. AuthGuard가 `window.addEventListener("storage", ...)`로 `pocketbase_auth` 키 변경 감지 → 다른 탭에서 logout 시 즉시 보호 라우트에서 빠짐.
+- **mount race 가드** — `cancelled` 플래그(AuthGuard) + `mountedRef`(LoginPage). 진행 중 navigate에서 setState-after-unmount 회피.
+- **로그인 폼 flash 방지** — `checkedAuth` state. 초기에는 spinner만 렌더, useEffect로 `isValid` 확인 후 form 또는 redirect 결정.
+
+**Review 처리:** finding 7건 중:
+- 즉시 수용 4건: state-set-after-unmount, cross-tab sync, login flash, login mount race
+- Defer 1건: Settings에 이메일/버전 표시 (S08+)
+- Skip 2건: BottomNav layout 끌어올림 / error message 표면 (현재 패턴 충분)
+- 상세는 `docs/review/phase-1.md`
+
+**다음 Story 영향:**
+- **S08 (세션 모듈):** AuthGuard 안에서 자유롭게 mutation 호출. `pb.authStore.record?.id`로 user id 접근. 이미 보호 라우트에 있으므로 추가 가드 불필요.
+- **S12 (오프라인 큐):** flush 시 `pb.authStore.isValid` 체크 후 진행. logout 상태에서 큐 retain.
+- **S13 (배포):** PB admin UI의 CORS "Allowed origins"에 Cloudflare Pages 도메인 추가 필요. 로컬은 `http://localhost:3000`, `http://localhost:3001`.
+- **S15 (Cloudflare Pages):** 정적 산출물의 보호 페이지가 spinner HTML이라 SEO/crawler 영향 있지만 솔로 PWA라 무관.
+
+**Follow-up — 사용자 검증 (docker + Comet):**
+1. 진행 중 docker compose / pnpm dev 그대로 두고
+2. `http://localhost:3000/`로 접속 → 토큰 없으므로 자동으로 `/login/`로 이동 (spinner → 폼)
+3. PB admin UI에서 만든 user의 이메일/비번 입력 → 로그인 → `/`로 이동
+4. `/settings/`에서 로그아웃 → 즉시 `/login/`로 이동 (보호 라우트 차단)
+5. 로그인 후 새로고침(F5) → 폼 안 보이고 곧바로 `/`에 머무름 (세션 유지)
+6. 두 탭 열어서 한쪽에서 로그아웃 → 다른 탭이 자동으로 `/login/`로 (cross-tab sync 확인)
+7. 검증 결과를 본 history에 ✅ 한 줄 추가.
+
