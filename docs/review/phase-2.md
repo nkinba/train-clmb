@@ -54,3 +54,67 @@
 | 🟢 `aria-disabled={true}` 명시 | **수용** | |
 | 🟢 `ACTIVE_KEY` 주석에 ADR 인용 | **반박** | dynamic-route 회피 결정은 ADR에 없음 (구현 결정). 주석 자체로 충분. |
 | 🟢 `useActiveSessionId` 훅 추출 | **반박** | 호출처 2건. YAGNI. Phase 2 추가 페이지에서 동일 패턴 반복 시 추출. |
+
+---
+
+## S09 — 2026-06-17
+
+### Subagent (general-purpose) 원문
+
+종합 평가: **accept-with-fixes** — 핵심 로직(상태머신·wall-clock tick·페이즈 신호 발사)은 견고하지만, 알림 권한 흐름·`abort` 시 의도하지 않은 완료 신호·`actual_hang_seconds` 의미 불일치 등 사용자 영향 있는 이슈 다수.
+
+#### 🔴 Critical
+- `web/src/app/(protected)/sessions/active/hangboard/page.tsx` 페이즈 신호 effect — `abort` 디스패치 후에도 `done` 분기로 진입해 "세션 완료" 비프·진동·알림 발사. `aborted` 마커 도입 권장.
+- `onStart` Notification 권한 자동 요청 — `await audio.unlock()` 뒤 호출이라 iOS Safari 사용자 제스처 문맥 소실 가능. setup 화면의 명시적 권한 요청 버튼만 남길 것.
+- `total_sets`/`actual_hang_seconds` 의미 — `total_sets: completedCount(state)`는 abort 시 작아지고, `actual_hang_seconds`는 무조건 target과 같음. 리뷰어는 `setup.config.totalSets` 권장.
+
+#### 🟡 Suggested
+- 결과 prompt overlay가 rest 카운트다운 가림 — prompt 안에 rest 남은 시간 표시 등 옵션.
+- `useAudioBeep`의 silent fail 신호 부재 — `ready: boolean` 노출.
+- RAF 60Hz tick은 배터리 낭비 — 100ms interval 충분.
+- `abort` 액션이 `Date.now()`를 reducer 내부에서 호출 — 순수성 손상.
+- `useWakeLock`의 enabled 토글 시 in-flight acquire/release 미세 race (한 사이클 안에서는 안전).
+- `audio`/`phaseNotif` 반환 객체 매 렌더 새로 — useMemo 안정화 권장.
+- `prevPhaseRef` 초기값을 명시적 `"idle"`로.
+- `rpe?: number`가 `undefined`일 때 PB 직렬화 동작 — 명시적 분기 권장.
+
+#### 🟢 Nit
+- `phaseBg` 3분기가 모두 `bg-canvas` — 죽은 코드.
+- `actual_hang_seconds` v1.1 트래킹을 history에 기록.
+- `Pause` 아이콘이 `onAbort` 핸들러에 — 시맨틱 mismatch, `Square` 권장.
+- 결과 토글 사이클이 단방향.
+- 매 렌더 `Date.now()` 호출은 무해.
+- dev에서 SW 미등록.
+
+#### 합격 항목 요약
+- 상태머신 순수성 + wall-clock 비교 → 백그라운드 throttle/시간 변경에 강건.
+- `Math.ceil(remainingMs/1000)` + `now >= phaseEndAt` 조건으로 마지막 hang 초 손실 없음.
+- `prevPhaseRef` 가드로 페이즈 신호 정확히 1회.
+- iOS-PWA SW notification 경로 + inline 폴백.
+- `document.hidden`일 때만 OS notification 발사.
+- Wake Lock visibilitychange 자동 재요청.
+- 세션 ID 가드.
+- 모바일 UX 토큰 (`h-tap-hero`, `tabular-nums`, safe-area).
+- route-level code-split.
+- 알림 본문에 PII 없음.
+
+### 본인 수용/반박 판단
+
+| 항목 | 결정 | 사유 |
+| --- | --- | --- |
+| 🔴 abort 후 done 신호 분기 | **수용** | `TimerState.aborted` 마커 추가, effect에서 `cur === "done" && !state.aborted`일 때만 완료 신호. |
+| 🔴 Notification 권한 onStart 자동 요청 제거 | **수용** | setup 화면의 명시적 버튼만 사용. iOS Safari 사용자 제스처 문맥 소실 회피. |
+| 🔴 `total_sets: setup.config.totalSets` 권장 | **반박** | PRD §5 성공 지표 "주간 행보드 총 매달리기 초"는 실제로 시도한 세트만 카운트해야 정확. abort 시 안 한 세트가 볼륨에 잡히면 데이터 왜곡. `completedCount(state)` 유지 + 의도 주석 강화. |
+| 🟡 결과 prompt overlay에 rest 남은 시간 표시 | **수용** | 옵션 3 (prompt 안에 작은 카운트다운). 휴식이 자동으로 흘러간다는 사실을 사용자에게 명시. |
+| 🟡 `useAudioBeep.ready` 노출 | **수용** | hook 자체에 노출. 노출만 하고 UI 분기는 follow-up. |
+| 🟡 RAF → 100ms interval | **수용** | 디스플레이는 초 단위라 10Hz로 충분. 배터리 절약. |
+| 🟡 `abort` 액션 `now` 파라미터 | **수용** | 순수성 복원. |
+| 🟡 wake lock micro-race | **반박/follow-up** | 한 사이클 안에서 cleanup가 cancelled 플래그를 set하므로 실 영향 없음. 향후 동시 사용 패턴이 발견되면 보강. |
+| 🟡 `audio`/`phaseNotif` useMemo 안정화 | **수용** | hook 반환을 useMemo로 감싸 호출 측 useEffect 재발사 제거. |
+| 🟡 `prevPhaseRef` 초기값 `"idle"` 명시 | **수용** | 의도 명확화. |
+| 🟡 `rpe?: number` 명시적 분기 | **수용** | payload 생성 시 `rpe != null`일 때만 키 추가. |
+| 🟢 `phaseBg` 죽은 코드 단순화 | **수용** | |
+| 🟢 v1.1 트래킹 (actual_hang_seconds 세트별) | **수용** | history follow-up에 기록. |
+| 🟢 `Pause` → `Square` 아이콘 | **수용** | 시맨틱 일치. |
+| 🟢 결과 토글 단방향 | **반박** | 빠른 순환 OK, 모바일 UX 트레이드오프. |
+| 🟢 dev SW 등록 | **반박** | 범위 밖. production 동작 검증은 사용자 디바이스에서. |

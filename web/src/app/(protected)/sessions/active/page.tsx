@@ -145,8 +145,7 @@ export default function ActiveSessionPage() {
               href="/sessions/active/hangboard/"
               Icon={Hand}
               title="행보드"
-              hint="S09에서 구현 예정"
-              disabled
+              hint="매달리기 / 휴식 자동 타이머"
             />
             <ModuleCard
               href="/sessions/active/climbing/"
