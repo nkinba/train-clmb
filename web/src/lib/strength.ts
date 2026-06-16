@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Collections, newClientId, pb } from "@/lib/pb";
+import { queuedCreate } from "@/lib/mutation-queue";
 
 export type StrengthLogRecord = {
   id: string;
@@ -61,9 +62,7 @@ export function useCreateStrengthLog() {
         sets: input.sets,
       };
       if (input.rpe != null) payload.rpe = input.rpe;
-      return await pb
-        .collection(Collections.StrengthLogs)
-        .create<StrengthLogRecord>(payload);
+      return await queuedCreate<StrengthLogRecord>("strength_logs", payload);
     },
     onSuccess: (rec) => {
       qc.invalidateQueries({ queryKey: strengthKeys.bySession(rec.session_id) });

@@ -244,3 +244,63 @@ PB schema에는 cross-field validator가 없어 클라이언트에서만 검증.
 5. PB admin UI에서 `strength_logs`, `campus_logs` row 확인.
 6. 5종목 연속 입력 60초 이내 도달 가능한지 실 디바이스 측정.
 7. 검증 결과를 본 history에 ✅ 한 줄 추가.
+
+---
+
+## S12 — 2026-06-17 (commit <pending>)
+
+### 변경 파일 요약
+- `web/package.json`, `web/pnpm-lock.yaml` — `idb-keyval@6.2.5` 추가.
+- `web/src/lib/mutation-queue.ts` *(신규)* — FIFO 큐 + queuedCreate + flushQueue + dead-letter store.
+- `web/src/hooks/use-queue-status.ts` *(신규)* — 큐 길이/online/flushing/dead 상태 + 자동 flush.
+- `web/src/components/queue-badge.tsx` *(신규)* — 상단 fixed 배지 (online/offline/flushing/dead-letter 4가지 톤).
+- `web/src/app/(protected)/layout.tsx` — QueueBadge 마운트 (인증된 화면만).
+- `web/src/lib/hangboard.ts`, `web/src/lib/climbing.ts`, `web/src/lib/strength.ts`, `web/src/lib/campus.ts` — mutationFn에 `queuedCreate` 적용.
+- `docs/STORIES.md` — S12 → ✅ Done.
+- `docs/review/phase-2.md` — S12 리뷰 append.
+
+### 주요 의사결정·트레이드오프
+
+#### 1. 큐 적용 범위 (STORIES 축소)
+STORIES S12 "모든 mutation을 IndexedDB 큐 경유"에서 일부 축소:
+- **자식 컬렉션** (hangboard/climbing/strength/campus) create만 큐 적용.
+- **세션 mutation** (create/end)은 온라인 가정.
+이유: `useCreateSession.onSuccess`가 `setActiveSessionId(rec.id)`로 server-side ID에 의존. 오프라인에서 가짜 ID로 활성 세션을 추적하려면 client_id ↔ server id 매핑 layer가 필요한데 S12 범위를 크게 벗어남. acceptance criteria("오프라인 토글 후 입력 → 동기화")는 자식 row로 충족. follow-up.
+
+#### 2. BroadcastChannel + CustomEvent 이중 신호
+BroadcastChannel은 **같은 탭**으로 메시지를 보내지 않음 (스펙). 결과적으로 enqueue 직후 자기 탭의 useQueueStatus가 length 갱신 못 받아 자동 flush가 트리거 안 됨. → 모듈 단위 BroadcastChannel(다른 탭) + `window.dispatchEvent("cf-queue-change")` CustomEvent(같은 탭) 동시 발사. `subscribeQueueChange`가 둘 다 구독.
+
+#### 3. Dead-letter 별도 store
+schema/권한 에러로 retries=3 도달한 항목을 큐에서 분리하지 않으면 5초 interval마다 PB에 실패 요청이 영원히 감. → IndexedDB 키 `dead:v1`로 분리. 배지가 dead 카운트를 별도 표시 (danger 톤), 클릭 시 수동 재시도(현재는 큐 flush만 트리거, dead 자체 재시도는 v1.1).
+
+#### 4. PB v0.22 client_id 충돌 응답 구조
+ClientResponseError의 `err.data` 구조가 한 단계 깊은 형태(`{ code, message, data: { client_id: {...} } }`)도 있어 outer + inner 둘 다 탐색해야 충돌을 정확히 감지.
+
+#### 5. 명시적 invalidate 키
+flushQueue 결과에 `succeededCollections: SupportedCollection[]` 포함 → hook이 해당 collection key만 `qc.invalidateQueries({ queryKey: [col] })`. 전역 invalidate보다 명시적이고 향후 query 추가 시 부작용 회피.
+
+#### 6. fake record와 onSuccess 호출 측 정합성
+오프라인/네트워크 에러 시 `id: ""`인 fake record 리턴. 모든 호출 측(hangboard/climbing/strength/campus) onSuccess가 `rec.session_id`만 사용 + `qc.invalidateQueries`만 호출 → fake record 정상 동작.
+
+### 다음 Story에 영향 줄 컨텍스트
+- Phase 2 완료. Phase 3 (배포)에 진입할 준비. STORIES S13 (서버 인프라) → S14 (백업) → S15 (Cloudflare Pages 배포).
+- S12의 큐 패턴은 v1.1 세션 mutation 큐화 시 reference (client_id ↔ server id 매핑 layer 필요).
+- 오프라인 인풋 시 fake record id="" 가정이 깨지는 호출 측 발생 시 별도 처리 필요.
+
+### 미해결 follow-up
+- **세션 create/end 큐 적용**: client_id ↔ server id 매핑 layer 추가. v1.1.
+- **Dead-letter 수동 관리 UI**: 항목별 폐기/재시도 화면. v1.1.
+- **충돌 응답 구조 변경 대비**: PB v0.23+ 업그레이드 시 isClientIdConflict 재검증.
+- **navigator.onLine false negative**: Captive Portal 등에서 실패 fallback은 catch에서 처리 중이지만 사용자에게 명확한 신호 부재. v1.1.
+- **flush 중 collection별 rate limiting**: 큐가 길어진 후 동기화 시 PB에 burst — 현재는 순차 await로 자연 throttle.
+
+### 브라우저 검증 (Comet MCP 미연결 — 사용자 직접 수행)
+빌드 15/15 정적, TypeScript 통과. (dev 서버가 새 idb-keyval 의존성 못 보면 500 → 재시작 필요.) 사용자 인터랙티브 검증:
+1. `cd web && pnpm dev` 재시작.
+2. 로그인 → 세션 시작 → 행보드/등반/근력 모듈에서 기록 추가 (정상 저장 확인).
+3. DevTools Network 탭에서 "Offline" 토글.
+4. 모듈에서 기록 추가 → 상단에 "오프라인 · 저장 대기 N" 배지 노출 확인.
+5. Network 다시 Online → 배지 "동기화 중" → 사라짐. PB admin UI에서 row 도착 확인.
+6. 다중 row 입력 후 오프라인 → 복구 동기화 → FIFO 순서로 PB에 도착.
+7. (선택) DevTools Application → IndexedDB → `cf-mutation-queue` store에 `queue:v1` 직접 확인.
+8. 검증 결과를 본 history에 ✅ 한 줄 추가.

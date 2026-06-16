@@ -206,3 +206,48 @@
 | 🟡 `movements` trim 일관성 | **반박** | 작은 nit, 실 동작 OK. |
 | 🟢 preset 한 화면 초과 | **사용자 위임** | 모바일 스크롤 흐름 OK. |
 | 🟢 preset 영어 라벨 | **유지** | 국제 명칭. |
+
+---
+
+## S12 — 2026-06-17
+
+### Subagent (general-purpose) 원문
+
+종합 평가: **accept-with-fixes** — client_id 멱등 재전송과 BroadcastChannel 탭 sync까지 깔끔히 설계되어 있으나 enqueue 직후 자동 flush 신호 끊김(BroadcastChannel는 same-tab post 무시)과 dead-letter rotation 무한 재시도가 critical.
+
+#### 🔴 Critical
+- `use-queue-status.ts:42` — BroadcastChannel이 같은 탭으로 메시지 전달 안 됨 → enqueue 직후 length state 갱신/flush 트리거 누락.
+- `mutation-queue.ts:208-216` — dead-letter rotation + break 조합이 무한 retry 루프. retries>=3 가드 부재로 5초마다 schema 에러 항목이 재시도.
+
+#### 🟡 Suggested
+- `isClientIdConflict` PB v0.22 응답 구조 (data.data.client_id) 한 단계 깊이 탐색 누락.
+- BroadcastChannel module-level 재사용 권장.
+- `qc.invalidateQueries()` 인자 없음 — 명시적 키 권장.
+- `enqueue` 직후 명시적 same-tab 신호 (CustomEvent).
+- `navigator.onLine` false negative 주석.
+- flush 중 offline 전환 가드 — 현 상태 OK.
+
+#### 🟢 Nit
+- `makeFakeRecord` JSDoc 추가.
+- 색 토큰 inline ternary OK.
+- `flushNow` void OK.
+- queue item id가 client_id generator 재사용 — 의도 명확화 권장.
+
+#### 추가 점검
+- `web/package.json`에 `idb-keyval` 의존성 누락 확인 → root에만 설치된 상태였음.
+
+### 본인 수용/반박 판단
+
+| 항목 | 결정 | 사유 |
+| --- | --- | --- |
+| 🔴 Same-tab flush 신호 끊김 | **수용** | window CustomEvent `cf-queue-change` 발사 + subscribeQueueChange가 같이 구독. BroadcastChannel은 module-level 재사용으로 통합. |
+| 🔴 dead-letter 무한 retry | **수용** | dead-letter를 별도 IndexedDB 키(`dead:v1`)로 분리. flush 시 retries>=MAX_RETRIES 항목은 큐 진입 시 dead로 이동. 배지가 dead 카운트 별도 표시 + 클릭 시 재시도 가능. |
+| 🟡 PB conflict 응답 구조 | **수용** | 한 단계 + 두 단계 client_id 키 모두 확인. |
+| 🟡 BroadcastChannel module-level 재사용 | **수용** | `getChannel()` 헬퍼로 통합. |
+| 🟡 명시적 invalidate 키 | **수용** | flushQueue 결과에 succeededCollections 추가 → hook이 해당 collection만 invalidate. |
+| 🟡 enqueue 직후 신호 | **수용** | Critical 1과 같이 처리. |
+| 🟡 navigator.onLine 주석 | **수용** | queuedCreate JSDoc에 명시. |
+| 🟡 flush 중 offline 가드 | **반박** | isNetworkLike catch에서 break하므로 동작 OK. |
+| 🟢 makeFakeRecord JSDoc | **수용** | |
+| 🟢 queue item id 분리 | **수용 (코멘트)** | 의도 주석 추가. |
+| 추가: package.json idb-keyval | **수용** | `cd web && pnpm add idb-keyval` 재실행으로 정식 등록. |

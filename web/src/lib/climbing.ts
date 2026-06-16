@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Collections, newClientId, pb } from "@/lib/pb";
+import { queuedCreate } from "@/lib/mutation-queue";
 
 export type ClimbingType = "Lead" | "Bouldering";
 
@@ -73,9 +74,7 @@ export function useCreateClimbingLog() {
       if (input.project_name?.trim()) payload.project_name = input.project_name.trim();
       if (input.notes?.trim()) payload.notes = input.notes.trim();
       if (input.rpe != null) payload.rpe = input.rpe;
-      return await pb
-        .collection(Collections.ClimbingLogs)
-        .create<ClimbingLogRecord>(payload);
+      return await queuedCreate<ClimbingLogRecord>("climbing_logs", payload);
     },
     onSuccess: (rec) => {
       qc.invalidateQueries({ queryKey: climbingKeys.bySession(rec.session_id) });

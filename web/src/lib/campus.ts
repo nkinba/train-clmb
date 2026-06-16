@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Collections, newClientId, pb } from "@/lib/pb";
+import { queuedCreate } from "@/lib/mutation-queue";
 
 export type CampusExerciseType = "ladder" | "touch" | "double_dyno";
 export type RungSize = "large" | "medium" | "small";
@@ -64,9 +65,7 @@ export function useCreateCampusLog() {
         total_sets: input.total_sets,
       };
       if (input.movements?.trim()) payload.movements = input.movements.trim();
-      return await pb
-        .collection(Collections.CampusLogs)
-        .create<CampusLogRecord>(payload);
+      return await queuedCreate<CampusLogRecord>("campus_logs", payload);
     },
     onSuccess: (rec) => {
       qc.invalidateQueries({ queryKey: campusKeys.bySession(rec.session_id) });

@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
-import { Collections, newClientId, pb } from "@/lib/pb";
+import { newClientId } from "@/lib/pb";
+import { queuedCreate } from "@/lib/mutation-queue";
 
 export type GripType = "half_crimp" | "open_hand";
 
@@ -41,9 +42,8 @@ export function useCreateHangboardLog() {
         client_id: newClientId(),
         ...input,
       };
-      return await pb
-        .collection(Collections.HangboardLogs)
-        .create<HangboardLogRecord>(payload);
+      // 오프라인 또는 네트워크 에러 시 IndexedDB 큐에 enqueue, 자동 flush로 동기화 (S12).
+      return await queuedCreate<HangboardLogRecord>("hangboard_logs", payload);
     },
   });
 }
