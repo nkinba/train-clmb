@@ -60,7 +60,7 @@ PB에서 세션 record가 삭제되면 localStorage에 stale ID가 남아 무한
 
 ---
 
-## S09 — 2026-06-17 (commit <pending>)
+## S09 — 2026-06-17 (commit c548a43)
 
 ### 변경 파일 요약
 - `web/src/lib/hangboard-timer.ts` *(신규)* — 순수 상태머신 (`Phase`/`TimerState`/`reduce`/selectors). wall-clock 비교 + `aborted` 마커.
