@@ -16,11 +16,19 @@ type ListProbe =
 
 type CreateProbe =
   | { kind: "loading" }
-  | { kind: "denied"; code: number }
+  | { kind: "denied"; code: number; note?: string }
   | { kind: "validation"; code: number; details: unknown }
   | { kind: "unexpected"; code: number; message: string; details: unknown }
   | { kind: "ok-bypassed" }
   | { kind: "error"; message: string };
+
+function isEmptyDetails(details: unknown): boolean {
+  return (
+    details !== null &&
+    typeof details === "object" &&
+    Object.keys(details as Record<string, unknown>).length === 0
+  );
+}
 
 function extractStatus(err: unknown): number {
   if (err && typeof err === "object" && "status" in err) {
@@ -99,6 +107,14 @@ export default function PbCheckPage() {
         const details = extractData(err);
         if (code === 401 || code === 403) {
           setCreateProbe({ kind: "denied", code });
+        } else if (code === 400 && isEmptyDetails(details)) {
+          // PB v0.22 quirk: createRule 거부 시 403 대신 400 + 빈 data로 응답.
+          // 서버 로그에 "DrySubmit create rule failure: sql: no rows in result set"가 동반.
+          setCreateProbe({
+            kind: "denied",
+            code,
+            note: "PB v0.22 quirk: rule 거부를 400 + empty data로 표현 (서버 로그 \"DrySubmit create rule failure\" 동반)",
+          });
         } else if (code === 400) {
           setCreateProbe({ kind: "validation", code, details });
         } else if (code > 0) {
@@ -180,9 +196,14 @@ export default function PbCheckPage() {
             <p className="mt-2 text-fg-secondary">확인 중…</p>
           )}
           {createProbe.kind === "denied" && (
-            <p className="mt-2 text-status-success font-semibold">
-              ✓ {createProbe.code} Forbidden — rule 정상 작동
-            </p>
+            <div className="mt-2 space-y-1">
+              <p className="text-status-success font-semibold">
+                ✓ {createProbe.code} — rule 정상 작동
+              </p>
+              {createProbe.note && (
+                <p className="text-micro text-fg-muted">{createProbe.note}</p>
+              )}
+            </div>
           )}
           {createProbe.kind === "ok-bypassed" && (
             <p className="mt-2 text-status-warning font-semibold">
