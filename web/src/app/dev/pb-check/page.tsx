@@ -17,7 +17,8 @@ type ListProbe =
 type CreateProbe =
   | { kind: "loading" }
   | { kind: "denied"; code: number }
-  | { kind: "unexpected"; code: number; message: string }
+  | { kind: "validation"; code: number; details: unknown }
+  | { kind: "unexpected"; code: number; message: string; details: unknown }
   | { kind: "ok-bypassed" }
   | { kind: "error"; message: string };
 
@@ -26,6 +27,15 @@ function extractStatus(err: unknown): number {
     return Number((err as { status: unknown }).status) || 0;
   }
   return 0;
+}
+
+function extractData(err: unknown): unknown {
+  // pocketbase ClientResponseError: err.response.data 또는 err.data
+  if (err && typeof err === "object") {
+    const e = err as { response?: { data?: unknown }; data?: unknown };
+    return e.response?.data ?? e.data ?? null;
+  }
+  return null;
 }
 
 export default function PbCheckPage() {
@@ -66,23 +76,37 @@ export default function PbCheckPage() {
       });
 
     // 3) Create probe (실제 gate 테스트)
-    //    createRule이 `@request.auth.id != ""`로 설정되어 있으면 비인증 create는 403.
-    //    createRule이 ""이면 400 (validation) 또는 200 (성공).
+    //    PocketBase는 보통 schema validation → rule 순서로 평가.
+    //    그러므로 validation 통과할 정도의 완전한 payload를 보내야 rule 작동 여부 확인 가능.
+    //    createRule이 `@request.auth.id != ""`이면 → 403
+    //    createRule이 ""(public)이면 → 201 ("ok-bypassed")
     pb.collection(Collections.Sessions)
       .create({
         client_id: `probe-${newClientId()}`,
-        date: new Date().toISOString().slice(0, 10),
+        date: new Date().toISOString(), // full ISO datetime
+        location: "probe",
+        total_time_mins: 0,
+        target: "probe",
+        notes: "automated probe — safe to delete",
+        shoulder_pain_start: 0,
+        finger_pain_start: 0,
+        shoulder_pain_end: 0,
+        finger_pain_end: 0,
       })
       .then(() => setCreateProbe({ kind: "ok-bypassed" }))
       .catch((err: unknown) => {
         const code = extractStatus(err);
+        const details = extractData(err);
         if (code === 401 || code === 403) {
           setCreateProbe({ kind: "denied", code });
+        } else if (code === 400) {
+          setCreateProbe({ kind: "validation", code, details });
         } else if (code > 0) {
           setCreateProbe({
             kind: "unexpected",
             code,
             message: err instanceof Error ? err.message : "unknown",
+            details,
           });
         } else {
           setCreateProbe({
@@ -162,13 +186,34 @@ export default function PbCheckPage() {
           )}
           {createProbe.kind === "ok-bypassed" && (
             <p className="mt-2 text-status-warning font-semibold">
-              ⚠ create 성공 — createRule이 비어있을 가능성. admin UI에서 점검.
+              ⚠ 201 Created — createRule이 비어있을 가능성. admin UI에서 점검.
+              테스트 record는 sessions 컬렉션에 "probe" 라벨로 남아있음, 삭제 요망.
             </p>
           )}
+          {createProbe.kind === "validation" && (
+            <div className="mt-2 space-y-2">
+              <p className="text-status-warning font-semibold">
+                ⚠ {createProbe.code} validation 실패 — rule 평가 전 schema 검증에서 거절.
+                상세를 보고 어느 필드 문제인지 확인:
+              </p>
+              <pre className="overflow-auto rounded bg-elevated p-3 text-micro text-fg-secondary">
+                {JSON.stringify(createProbe.details, null, 2)}
+              </pre>
+              <p className="text-micro text-fg-muted">
+                만약 PB가 rule 전에 validation을 거는 동작이면, 200/401/403이 아닌
+                "특정 필드 invalid"가 떠도 rule 자체는 정상일 수 있음.
+              </p>
+            </div>
+          )}
           {createProbe.kind === "unexpected" && (
-            <p className="mt-2 text-status-warning font-semibold">
-              ⚠ {createProbe.code} {createProbe.message}
-            </p>
+            <div className="mt-2 space-y-2">
+              <p className="text-status-warning font-semibold">
+                ⚠ {createProbe.code} {createProbe.message}
+              </p>
+              <pre className="overflow-auto rounded bg-elevated p-3 text-micro text-fg-secondary">
+                {JSON.stringify(createProbe.details, null, 2)}
+              </pre>
+            </div>
           )}
           {createProbe.kind === "error" && (
             <p className="mt-2 text-status-danger font-semibold">✗ {createProbe.message}</p>
