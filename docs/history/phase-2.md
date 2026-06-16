@@ -1,6 +1,6 @@
 # Phase 2 — History
 
-## S08 — 2026-06-17 (commit <pending>)
+## S08 — 2026-06-17 (commit a96c815)
 
 ### 변경 파일 요약
 - `web/package.json`, `web/pnpm-lock.yaml` — `@tanstack/react-query@5.101.0` 추가.
