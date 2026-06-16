@@ -51,3 +51,53 @@
     - Lighthouse PWA audit (installable 조건 + PNG fallback 권고 시 추가)
     - 모바일 뷰포트(iPhone 14, 390×844)에서 lang="ko", theme-color 적용 확인
 - 검증 통과 시 본 history에 ✅ 한 줄 추가, fail 시 추가 fix Story 작성.
+
+## S05 — 2026-06-16
+**변경 파일:**
+- `web/src/app/globals.css` — 전체 토큰 매핑 (`@theme`), `@custom-variant dark`, focus ring (box-shadow), reduced-motion, skeleton keyframe, `bg-selected/-pressed` 추가
+- `web/src/components/bottom-nav.tsx` (신규, server component) — 4탭 (오늘/기록/분석/설정), lucide 아이콘, safe-area-inset 처리
+- `web/src/components/number-stepper.tsx` (신규, client) — ±버튼 + 거대 숫자 표시, min/max/step/unit, disabled 처리
+- `web/src/components/timer-display.tsx` (신규, server) — 풀스크린 거대 숫자 (10rem) + phase별 색·glow, `aria-live="off"` (S09 TODO)
+- `web/src/components/pain-selector.tsx` (신규, client) — 통증 0–3, roving tabindex + Arrow/Home/End 키
+- `web/src/components/rpe-selector.tsx` (신규, client) — RPE 1–10 5×2 그리드, 4-band 색, roving tabindex
+- `web/src/app/dev/components/page.tsx` (신규) — 컴포넌트 카탈로그 (색·타입 스케일·5개 컴포넌트·CTA·focus ring 시연)
+- `web/src/app/{logs,analysis,settings}/page.tsx` (신규) — BottomNav 라우트 placeholder
+- `web/src/app/page.tsx` — home에 BottomNav + /dev/components 안내
+- `web/package.json` — lucide-react, class-variance-authority 추가
+- `docs/design-tokens.md` — S05 namespace 변경 노트 상단 추가, §10 historical 표기
+- `docs/review/phase-1.md` — S05 리뷰 + 본인 판단
+- `docs/STORIES.md` — S05 ✅
+- `docs/history/phase-1.md` — 본 엔트리
+
+**주요 결정:**
+- **토큰 namespace 정돈** — `text-text-primary` → `text-fg-primary`, `bg.base` → `canvas`, `bg.success` → `success` 등. design-tokens.md는 의미 단위 spec으로 유지, `globals.css`가 source of truth. 명시적 매핑 표를 doc 상단에 박음.
+- **Tailwind 4 `@theme` 전면 채택** — JS config 없이 CSS-only. `--text-*--line-height` modifier 문법으로 line-height와 weight 동시 정의.
+- **focus ring: box-shadow 2겹** — outline 대신 layout-shift 없는 ring. **border-radius 강제 없음** — 요소 본래 모서리 따라감 (리뷰 finding 1).
+- **dark mode `@custom-variant`** — 클래스 기반 토글 진입점만 준비. 실제 라이트 모드 토큰 매핑은 v1.1 또는 사용자 요청 시.
+- **roving tabindex로 radio 그룹 a11y** — `button[role=radio]`는 native arrow nav 없음. 두 컴포넌트에 인라인 핸들러 (공통 hook은 YAGNI). 1D 모델: Left/Up=prev, Right/Down=next, Home/End.
+- **BottomNav는 server component** — hook 없음. 클라이언트 번들 절감.
+- **TimerDisplay `aria-live="off"`** — 매 초 갱신 SR 스팸 회피. phase 전환 announce는 S09에서 별도 region.
+
+**Review 처리:** finding 13건 중:
+- 즉시 수용 (7건): focus-visible border-radius 제거, TimerDisplay aria-live, radio roving tabindex, design-tokens.md rename 노트, bg-selected/pressed 추가, BottomNav use client 제거, RpeSelector scale → ring
+- Defer (1건): unused ease 토큰은 S08+ 첫 사용 시 자연 해결
+- 무해·확인 (5건): contrast 계산상 AA, viewport, lang, static export, S06+ 영향 분석
+- 상세는 `docs/review/phase-1.md`
+
+**다음 Story 영향:**
+- **S06 (PocketBase):** 클라이언트 컴포넌트에서 SDK 호출. dev/components 패턴(`"use client"` + `useState`)이 reference.
+- **S08 (세션 모듈):** Sheet/Dialog, Chip/Tag, 폼 레이아웃 helper 추가 필요(S08 스코프). PainSelector + NumberStepper + Primary CTA는 즉시 재사용.
+- **S09 (행보드 타이머):** TimerDisplay 재사용. Wake Lock + Vibration + Audio + state machine 직접 구현. phase 전환 시 `aria-live="assertive"` 영역 추가.
+- **S16 (대시보드):** pain/rpe 색 토큰 그대로 Recharts에서 사용 (구현 hex와 일치).
+
+**Follow-up:**
+- Comet MCP로 다음 검증 (CLAUDE.md "브라우저 검증"):
+  - `cd web && pnpm dev` 후 `/dev/components`에서
+    - 9개 contrast 조합 실측 (design-tokens.md §1.10 — 본 PR 이전 검증으로 충분)
+    - PainSelector·RpeSelector에서 키보드 Arrow/Home/End 동작
+    - Tab으로 focus ring이 모든 인터랙티브 요소에 표시되고 모서리가 요소를 따라가는지
+    - BottomNav 엄지 zone 위치 (iPhone 14, 390×844)
+    - 통증 색 가독성 (pain-3 빨강 + 다크 텍스트가 deload 신호로 충분히 강한지)
+  - 검증 후 본 history에 결과 한 줄 추가
+- S08에서 Sheet·Chip·Form 레이아웃 컴포넌트 추가 (S05 scope 밖이었음).
+

@@ -57,3 +57,59 @@ Reviewer: general-purpose subagent (independent, no prior context).
 **대기 (다른 Story):** 13 (S15 deploy), 15 (info)
 
 반박: 없음. 모든 finding이 사실 기반이고, 즉시/이월 분류도 합리적.
+
+---
+
+## S05 — 2026-06-16
+
+Reviewer: general-purpose subagent.
+
+### 원문 요약
+
+**Verdict:** Pass with required minor fixes. 토큰 맵·TW4 idiom·컴포넌트 모두 깔끔. 2개 실제 버그(focus-visible의 border-radius 덮어쓰기, TimerDisplay aria-live spam)와 1개 a11y 미흡(radio 그룹 arrow-key 없음)이 S08/S09 차단 가능. 스펙/구현 drift(doc 옛 namespace) 1건.
+
+**Findings:**
+
+1. **[major] `:focus-visible`가 `border-radius`를 6px로 덮음** (globals.css:151). 모든 포커스 요소의 모서리가 강제로 6px로 변경 → `rounded-md/lg/xl` 버튼의 ring이 모서리 불일치. 한 줄 삭제로 해결.
+
+2. **[major] `TimerDisplay`의 `aria-live="polite"`가 매 초 SR 스팸** (timer-display.tsx:48). 7s 매달리기·90s 휴식 동안 사용 불가. `aria-live="off"`로 변경, S09에서 phase 전환 시점에만 별도 live region 띄우도록 TODO.
+
+3. **[major] PainSelector/RpeSelector에 화살표 키 내비게이션 없음.** `role="radio*"` 선언했으나 `button[role=radio]`는 native arrow nav 없음. roving tabindex + ArrowLeft/Right/Up/Down 핸들러 추가 필요.
+
+4. **[minor] design-tokens.md namespace drift** — 본 doc은 여전히 `bg.base`, `text.primary` 등 사용. S05 구현은 `--color-canvas`, `--color-fg-primary`로 옮김. doc 상단에 "S05에서 rename" 노트 + §10 historical 표기.
+
+5. **[minor] §1.11 일부 state token 미반영** — `bg.selected`, `bg.pressed` 부재. S08 chips/filters에 필요. 선제 추가.
+
+6. **[nit] `--ease-out-soft`, `--ease-in-soft` 선언했으나 사용 없음.** S08+에서 사용 시 해결. defer.
+
+7. **[nit] `bottom-nav.tsx`가 불필요하게 `"use client"`.** hook/handler 없음 → server component로 만들고 home/logs/analysis/settings 클라이언트 번들 절감.
+
+8. **[nit] PainSelector contrast** — 계산상 모두 AA 이상. 행위 없음. Comet 실측 시 confirm.
+
+9. **[nit] RpeSelector `scale-105`가 grid gap에 살짝 overlap 가능성** — ring 방식으로 교체 권장.
+
+10. **[nit] focus ring contrast vs canvas** — `#fb923c` on `#09090b` ≈ 7.0:1, WCAG UI 3:1 충족. OK.
+
+11. **[pass]** viewport, lang="ko" 유지 확인.
+
+12. **[pass]** static export 8 routes 정상.
+
+13. **[info]** S06–S09 영향: S06 client/server 경계 강제 안 함. S08은 Sheet/Dialog/Chip이 추가로 필요(S08 자체 범위). S09는 Finding #2가 상속됨.
+
+### 본인 판단
+
+**즉시 수용 (S05 commit 전 처리):** 1, 2, 3, 4, 5, 7, 9
+
+- 1: globals.css의 `border-radius` 1행 삭제.
+- 2: timer-display.tsx의 `aria-live` → "off" + S09 TODO 주석.
+- 3: roving tabindex + arrow key handler를 두 컴포넌트에 인라인 (공통 헬퍼는 YAGNI). 1D 모델: Arrow Left/Up=prev, Right/Down=next, Home=first, End=last.
+- 4: docs/design-tokens.md 상단에 rename 노트 + §10 historical 표기.
+- 5: `--color-bg-selected`, `--color-bg-pressed` 추가.
+- 7: bottom-nav.tsx `"use client"` 제거.
+- 9: `scale-105` → `ring-4 ring-fg-primary` 같은 ring 방식. scale 제거.
+
+**Defer:** 6 (ease 토큰 미사용은 S08+ 첫 사용 시 자연 해결).
+
+**무해/확인 완료:** 8, 10–13.
+
+반박: 없음.

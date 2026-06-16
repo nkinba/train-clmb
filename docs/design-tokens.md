@@ -1,7 +1,29 @@
 # Design Tokens — Climb-Forge
 
-본 토큰은 Tailwind config (`tailwind.config.ts`)로 옮길 기준값. 다크 모드 우선, 라이트는 보조.
+본 토큰은 Tailwind config로 옮길 기준값. 다크 모드 우선, 라이트는 보조.
 근거는 `UI.md` (한 손 조작·분필 손·암장 조명·풀스크린 타이머)에서 도출.
+
+> **⚠️ S05 이후의 namespace 변경 (구현 ≠ 본 spec 문서):**
+> Tailwind 4로 옮기면서 토큰 명을 다음과 같이 단축·정돈했다. 구현 진실값은
+> `web/src/app/globals.css`이며, 본 문서는 의미 단위로 읽기 위한 spec.
+>
+> | 본 문서 (spec) | 구현 (`globals.css`) |
+> |---------------|----------------------|
+> | `bg.base` | `--color-canvas` |
+> | `bg.surface` | `--color-surface` |
+> | `bg.elevated` | `--color-elevated` |
+> | `bg.subtle` | `--color-subtle` |
+> | `text.primary/secondary/muted/disabled/inverse` | `--color-fg-primary/-secondary/-muted/-disabled/-inverse` |
+> | `brand.primary/hover/active/onPrimary` | `--color-brand/-hover/-active`, `--color-on-brand` |
+> | `bg.success/danger/warning` | `--color-success/-danger/-warning` |
+> | `text.onSuccess/onDanger` | `--color-on-success/-on-danger` |
+> | `border.default/strong/disabled` | `--color-border/-strong/-disabled` |
+> | `focus.ring` (값) | `--shadow-focus-ring` |
+> | `bg.selected/pressed` | `--color-bg-selected/-pressed` |
+> | (기타 timer/status/pain/rpe) | 동일 접두 (`--color-timer-*`, `--color-pain-*`, `--color-rpe-*`) |
+>
+> §10 (구) "Tailwind 3 JS config" 예제는 historical. Tailwind 4 `@theme` 매핑은
+> `globals.css`를 source of truth로 사용한다.
 
 ---
 
@@ -260,7 +282,11 @@ UI.md §1: 한 손 + 분필 손 → 최소 48dp, 핵심 액션은 56dp+.
 
 ---
 
-## 10. Tailwind 매핑 가이드
+## 10. Tailwind 매핑 가이드 (Historical — Tailwind 3 JS config 예제)
+
+> 이 절은 S04 이전 Tailwind 3 가정 하에 작성됐다. Tailwind 4로 migration된 현재
+> source of truth는 `web/src/app/globals.css`의 `@theme` 블록이다. 아래는 참고용
+> 보관.
 
 `tailwind.config.ts`로 옮길 때 `theme.extend`에 추가. 기본 색상 팔레트(zinc/orange/red 등)는 Tailwind 기본을 그대로 사용하고, 본 프로젝트 고유 토큰만 extend.
 

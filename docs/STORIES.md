@@ -53,7 +53,7 @@
 - [ ] Comet에서 `out/` 로컬 서빙 시 PWA installable
 - [ ] manifest, SW 등록 Comet MCP로 검증
 
-### S05 — 디자인 시스템 ⬜
+### S05 — 디자인 시스템 ✅
 **Goal:** S03 토큰을 Tailwind config로 옮기고, 다크 모드 + 하단 탭 네비 컴포넌트 작성.
 **Dependencies:** S03, S04
 **Tasks:**
