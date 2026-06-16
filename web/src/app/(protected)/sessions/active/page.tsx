@@ -157,8 +157,7 @@ export default function ActiveSessionPage() {
               href="/sessions/active/strength/"
               Icon={Dumbbell}
               title="보조 근력 / 캠퍼스"
-              hint="S11에서 구현 예정"
-              disabled
+              hint="웨이트 · 캠퍼스 보드 기록"
             />
           </section>
 

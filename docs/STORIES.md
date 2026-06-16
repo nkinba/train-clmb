@@ -140,7 +140,7 @@
 - [ ] 한 손 조작으로 입력 완료
 - [ ] DB row 정상 저장
 
-### S11 — 보조 근력 모듈 (Strength + Campus) ⬜
+### S11 — 보조 근력 모듈 (Strength + Campus) ✅
 **Goal:** 웨이트·캠퍼스 보드 기록.
 **Dependencies:** S05, S07, S08
 **Tasks:**

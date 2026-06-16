@@ -166,3 +166,43 @@
 | 🟢 queryKey null 분기 | **수용** | `enabled`만으로 충분. |
 | 🟢 `row.rpe != null` | **수용** | |
 | 🟢 Lead thumb-reach | **사용자 위임** | 실 디바이스 검증 가이드에 포함. |
+
+---
+
+## S11 — 2026-06-17
+
+### Subagent (general-purpose) 원문
+
+종합 평가: **accept-with-fixes (Critical 없음)** — S10 패턴 재사용 깔끔, PB 스키마와 enum 정합성·검증·빈 값 키 제거 모두 적절.
+
+#### 🟡 Suggested
+- 모드 토글 시 sub-form 마운트/언마운트로 입력 손실 — hidden 토글 권장.
+- `row.rpe > 0` 가드는 schema min:1 + payload 키 제거로 데드 코드.
+- `added_weight_kg` schema min:-100 vs UI stepper min:-50 비대칭.
+- `movements` trim 일관성.
+
+#### 🟢 Nit
+- preset grid + 전체 폼이 iPhone 14 한 화면 초과 (스크롤 필요).
+- preset 영어 라벨.
+- 초기 Pull-up 선택 시각적 강조 확인.
+
+#### 합격 항목
+- enum values 코드↔migration 일치.
+- `pb.filter()` 바인딩.
+- 빈 rpe/movements 키 제거.
+- success_sets > total_sets 클라이언트 검증.
+- client_id 멱등 키.
+- 종목/세트/반복 유지 + weight/rpe만 리셋 → 5종목 60초 흐름 의도.
+- custom 입력 trim.
+- 모드 토글 radiogroup ARIA 정확.
+
+### 본인 수용/반박 판단
+
+| 항목 | 결정 | 사유 |
+| --- | --- | --- |
+| 🟡 모드 전환 입력 손실 → hidden 토글 | **수용** | 60초 흐름 신뢰성. |
+| 🟡 `row.rpe > 0` 데드 코드 | **수용** | `!= null`로 단순화. |
+| 🟡 `added_weight_kg` min 비대칭 | **반박** | UI는 실용 범위(-50), schema 허용은 보수적(-100). 의도된 분리. |
+| 🟡 `movements` trim 일관성 | **반박** | 작은 nit, 실 동작 OK. |
+| 🟢 preset 한 화면 초과 | **사용자 위임** | 모바일 스크롤 흐름 OK. |
+| 🟢 preset 영어 라벨 | **유지** | 국제 명칭. |
