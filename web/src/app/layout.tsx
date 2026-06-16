@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { SwRegister } from "@/components/sw-register";
+import { QueryProvider } from "@/components/query-provider";
 
 export const metadata: Metadata = {
   title: "Climb-Forge",
@@ -33,7 +34,7 @@ export default function RootLayout({
     <html lang="ko" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <SwRegister />
-        {children}
+        <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
   );
