@@ -2,64 +2,93 @@
 
 import { useEffect, useState } from "react";
 import { BottomNav } from "@/components/bottom-nav";
-import { Collections, pb } from "@/lib/pb";
+import { Collections, newClientId, pb } from "@/lib/pb";
 
-type Status =
+type HealthState =
   | { kind: "loading" }
-  | { kind: "ok"; ms: number; rawHealth: unknown; rulesNote: string };
-
-type CollectionProbe =
-  | { kind: "loading" }
-  | { kind: "denied"; code: number; message: string }
-  | { kind: "ok"; count: number }
+  | { kind: "ok"; ms: number; rawHealth: unknown }
   | { kind: "error"; message: string };
 
+type ListProbe =
+  | { kind: "loading" }
+  | { kind: "ok"; totalItems: number }
+  | { kind: "error"; message: string };
+
+type CreateProbe =
+  | { kind: "loading" }
+  | { kind: "denied"; code: number }
+  | { kind: "unexpected"; code: number; message: string }
+  | { kind: "ok-bypassed" }
+  | { kind: "error"; message: string };
+
+function extractStatus(err: unknown): number {
+  if (err && typeof err === "object" && "status" in err) {
+    return Number((err as { status: unknown }).status) || 0;
+  }
+  return 0;
+}
+
 export default function PbCheckPage() {
-  const [status, setStatus] = useState<Status | { kind: "error"; message: string }>(
-    { kind: "loading" },
-  );
-  const [probe, setProbe] = useState<CollectionProbe>({ kind: "loading" });
+  const [health, setHealth] = useState<HealthState>({ kind: "loading" });
+  const [listProbe, setListProbe] = useState<ListProbe>({ kind: "loading" });
+  const [createProbe, setCreateProbe] = useState<CreateProbe>({ kind: "loading" });
 
   useEffect(() => {
+    // 1) Health
     const start = performance.now();
     pb.health
       .check()
-      .then((health) => {
-        const ms = Math.round(performance.now() - start);
-        setStatus({
+      .then((raw) => {
+        setHealth({
           kind: "ok",
-          ms,
-          rawHealth: health,
-          rulesNote:
-            "health는 인증 불필요. 아래 collection probe로 rule 작동 확인.",
+          ms: Math.round(performance.now() - start),
+          rawHealth: raw,
         });
       })
       .catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : "unknown error (콘솔 확인)";
-        setStatus({ kind: "error", message });
+        setHealth({
+          kind: "error",
+          message: err instanceof Error ? err.message : "unknown error",
+        });
       });
 
-    // Rule이 실제 작동하는지 확인: 비인증 상태에서 sessions 1건 조회 시도.
-    // 기대값 = 401/403 → "rule 정상 작동" 신호.
+    // 2) List probe (정보용 — PB list rule은 filter라 gate가 아님)
+    //    listRule이 set이고 비인증이면 totalItems=0이 정상.
+    //    listRule이 ""이면 모든 record 노출 → totalItems > 0 (단 record 있어야).
     pb.collection(Collections.Sessions)
       .getList(1, 1)
-      .then((res) => setProbe({ kind: "ok", count: res.totalItems }))
+      .then((res) => setListProbe({ kind: "ok", totalItems: res.totalItems }))
       .catch((err: unknown) => {
-        const status =
-          err && typeof err === "object" && "status" in err
-            ? Number((err as { status: unknown }).status)
-            : 0;
-        if (status === 401 || status === 403) {
-          setProbe({
-            kind: "denied",
-            code: status,
-            message: "auth required (rule 정상 작동)",
+        setListProbe({
+          kind: "error",
+          message: err instanceof Error ? err.message : "unknown error",
+        });
+      });
+
+    // 3) Create probe (실제 gate 테스트)
+    //    createRule이 `@request.auth.id != ""`로 설정되어 있으면 비인증 create는 403.
+    //    createRule이 ""이면 400 (validation) 또는 200 (성공).
+    pb.collection(Collections.Sessions)
+      .create({
+        client_id: `probe-${newClientId()}`,
+        date: new Date().toISOString().slice(0, 10),
+      })
+      .then(() => setCreateProbe({ kind: "ok-bypassed" }))
+      .catch((err: unknown) => {
+        const code = extractStatus(err);
+        if (code === 401 || code === 403) {
+          setCreateProbe({ kind: "denied", code });
+        } else if (code > 0) {
+          setCreateProbe({
+            kind: "unexpected",
+            code,
+            message: err instanceof Error ? err.message : "unknown",
           });
         } else {
-          const message =
-            err instanceof Error ? err.message : "unknown error";
-          setProbe({ kind: "error", message });
+          setCreateProbe({
+            kind: "error",
+            message: err instanceof Error ? err.message : "unknown",
+          });
         }
       });
   }, []);
@@ -70,27 +99,27 @@ export default function PbCheckPage() {
         <header>
           <h1 className="text-h1 font-bold text-fg-primary">PocketBase 연결 확인</h1>
           <p className="mt-1 text-caption text-fg-muted">
-            S06 sample fetch. `NEXT_PUBLIC_PB_URL`로 health 호출.
+            S06: health + 2가지 probe. 인증 없이 호출되므로 createRule이 gate처럼 작동.
           </p>
         </header>
 
         <section className="rounded-lg bg-surface p-4">
           <h2 className="text-h3 font-semibold text-fg-primary">Health</h2>
-          {status.kind === "loading" && (
+          {health.kind === "loading" && (
             <p className="mt-2 text-fg-secondary">확인 중…</p>
           )}
-          {status.kind === "ok" && (
+          {health.kind === "ok" && (
             <div className="mt-2 space-y-2">
-              <p className="text-status-success font-semibold">✓ 연결 성공 ({status.ms}ms)</p>
+              <p className="text-status-success font-semibold">✓ 연결 성공 ({health.ms}ms)</p>
               <pre className="overflow-auto rounded bg-elevated p-3 text-micro text-fg-secondary">
-                {JSON.stringify(status.rawHealth, null, 2)}
+                {JSON.stringify(health.rawHealth, null, 2)}
               </pre>
             </div>
           )}
-          {status.kind === "error" && (
+          {health.kind === "error" && (
             <div className="mt-2 space-y-2">
               <p className="text-status-danger font-semibold">✗ 연결 실패</p>
-              <p className="text-caption text-fg-secondary">{status.message}</p>
+              <p className="text-caption text-fg-secondary">{health.message}</p>
               <p className="text-micro text-fg-muted">
                 docker compose가 실행 중인지, `.env.local`의 `NEXT_PUBLIC_PB_URL`이
                 맞는지 확인.
@@ -100,27 +129,49 @@ export default function PbCheckPage() {
         </section>
 
         <section className="rounded-lg bg-surface p-4">
-          <h2 className="text-h3 font-semibold text-fg-primary">Rule probe (sessions)</h2>
+          <h2 className="text-h3 font-semibold text-fg-primary">List probe — 정보용</h2>
           <p className="mt-1 text-micro text-fg-muted">
-            비인증 상태에서 sessions 조회 시도. 401/403이 정상.
+            PocketBase list rule은 SQL WHERE 절에 추가되는 <em>필터</em>지 gate가 아님.
+            비인증 + `@request.auth.id != ""` → 매칭 0개 → 200 + totalItems=0이 정상.
           </p>
-          {probe.kind === "loading" && (
+          {listProbe.kind === "loading" && (
             <p className="mt-2 text-fg-secondary">확인 중…</p>
           )}
-          {probe.kind === "denied" && (
+          {listProbe.kind === "ok" && (
+            <p className="mt-2 text-status-info">
+              totalItems = {listProbe.totalItems} (해석은 createRule probe로)
+            </p>
+          )}
+          {listProbe.kind === "error" && (
+            <p className="mt-2 text-status-danger font-semibold">✗ {listProbe.message}</p>
+          )}
+        </section>
+
+        <section className="rounded-lg bg-surface p-4">
+          <h2 className="text-h3 font-semibold text-fg-primary">Create probe — 실제 gate</h2>
+          <p className="mt-1 text-micro text-fg-muted">
+            비인증 상태에서 sessions create 시도. createRule이 `@request.auth.id != ""`면 403.
+          </p>
+          {createProbe.kind === "loading" && (
+            <p className="mt-2 text-fg-secondary">확인 중…</p>
+          )}
+          {createProbe.kind === "denied" && (
             <p className="mt-2 text-status-success font-semibold">
-              ✓ {probe.code} {probe.message}
+              ✓ {createProbe.code} Forbidden — rule 정상 작동
             </p>
           )}
-          {probe.kind === "ok" && (
+          {createProbe.kind === "ok-bypassed" && (
             <p className="mt-2 text-status-warning font-semibold">
-              ⚠ rule 우회됨 (totalItems={probe.count}) — 인증 없이 읽힘. rule 점검 필요.
+              ⚠ create 성공 — createRule이 비어있을 가능성. admin UI에서 점검.
             </p>
           )}
-          {probe.kind === "error" && (
-            <p className="mt-2 text-status-danger font-semibold">
-              ✗ {probe.message}
+          {createProbe.kind === "unexpected" && (
+            <p className="mt-2 text-status-warning font-semibold">
+              ⚠ {createProbe.code} {createProbe.message}
             </p>
+          )}
+          {createProbe.kind === "error" && (
+            <p className="mt-2 text-status-danger font-semibold">✗ {createProbe.message}</p>
           )}
         </section>
 
