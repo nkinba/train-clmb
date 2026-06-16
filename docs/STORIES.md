@@ -128,7 +128,7 @@
 - [ ] 백그라운드 진입 후 페이즈 전환 알림 도착
 - [ ] 5세트 완료 후 DB row 1개 저장
 
-### S10 — 등반 볼륨 모듈 (Lead/Bouldering) ⬜
+### S10 — 등반 볼륨 모듈 (Lead/Bouldering) ✅
 **Goal:** 리드/볼더링 시도·완등 기록.
 **Dependencies:** S05, S07, S08
 **Tasks:**

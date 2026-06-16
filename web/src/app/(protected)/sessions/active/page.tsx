@@ -151,8 +151,7 @@ export default function ActiveSessionPage() {
               href="/sessions/active/climbing/"
               Icon={Timer}
               title="등반 (Lead / Bouldering)"
-              hint="S10에서 구현 예정"
-              disabled
+              hint="그레이드 · 시도 · 완등 기록"
             />
             <ModuleCard
               href="/sessions/active/strength/"

@@ -127,3 +127,68 @@ PRD §3은 모호하지만 §5 성공 지표 "주간 행보드 총 매달리기 
 9. RPE 선택 → "기록 저장" → `/sessions/active/`로 복귀. PB admin UI에서 `hangboard_logs` row 확인 (success_sets, total_sets, grip_type, hold_size_mm, weight_offset_kg, rpe).
 10. abort 시나리오: 타이머 동작 중 우상단 정지 버튼 → 즉시 summary로 (완료 비프/진동/알림 발사 안 됨 확인).
 11. 검증 결과를 본 history에 ✅ 한 줄 추가.
+
+---
+
+## S10 — 2026-06-17 (commit <pending>)
+
+### 변경 파일 요약
+- `web/src/lib/climbing.ts` *(신규)* — 타입 + create mutation + 세션별 list query + Lead/Bouldering 그레이드 상수.
+- `web/src/components/climbing/grade-picker.tsx` *(신규)* — radiogroup + roving tabindex.
+- `web/src/components/climbing/rest-timer.tsx` *(신규)* — 단순 1-페이즈 카운트다운 (3분 기본) + beep + vibrate.
+- `web/src/app/(protected)/sessions/active/climbing/page.tsx` *(신규)* — 모드 토글 / 그레이드 / 시도 / 완등 / 프로젝트 / 메모 / RPE / 휴식 타이머 / 누적 row list.
+- `web/src/app/(protected)/sessions/active/page.tsx` — 등반 카드 활성화.
+- `docs/STORIES.md` — S10 → ✅ Done.
+- `docs/review/phase-2.md` — S10 리뷰 append.
+
+### 주요 의사결정·트레이드오프
+
+#### 1. row-by-row 저장 + 부분 리셋
+한 세션에 여러 시도 row를 누적. 저장 시 attempts/isSend/notes/rpe만 리셋, grade/projectName/type 유지 — 같은 프로젝트를 여러 번 시도하는 흐름과 일치.
+
+#### 2. Lead `is_send` 처리 (PB bool nullable 부재)
+PRD §3은 Lead의 `is_send`를 "의미 없음 → null"로 정의했으나 PocketBase bool은 null 미지원. 마이그레이션 주석에 이미 명시된 트레이드오프대로 **Lead 시 강제 false 저장 + UI 숨김 + 모드 전환 시 리셋**.
+
+#### 3. RestTimer는 별도 단순 카운트다운
+S09의 풀스크린 머신을 재사용하지 않은 이유:
+- 풀스크린 전환 불필요 (폼 옆 위젯)
+- 페이즈 cycle 1개로 충분
+- 단순 useState로 100ms tick 운영, beep/vibrate는 한 번만 (firedRef).
+
+#### 4. Lead 그레이드 범위 (PRD/STORIES drift)
+STORIES S10: "5.10D~5.12A". PRD §3: "5.10D~5.11A".
+구현: **5.10a~5.12a (9개)**. 워밍업 그레이드 기록 유연성 + 진척 측정용 PRD 타깃 범위(5.12/V7)를 모두 포함.
+drift 식별:
+- PRD §3의 "5.10D~5.11A"는 한 화면에서 추적할 핵심 타깃 그레이드 (문서 작성 시점의 사용자 등급).
+- STORIES S10의 "5.10D~5.12A"는 입력 가능 범위로 확장된 표현.
+- 구현은 5.10a~5.12a로 한 단계 더 확장. 워밍업/기록 누락 회피 위해.
+→ 차후 PRD/STORIES 정합성 점검 시 "타깃 범위 vs 입력 범위" 구분 명시 권장.
+
+#### 5. PB filter 바인딩
+`pb.filter("session_id = {:sid}", { sid })` 사용 — 인젝션 디폴트 안전성. S11에서도 reference.
+
+#### 6. 그레이드 grid-cols-3 vs 모바일 thumb-reach
+Lead 9개를 3열로 wrap. 첫 행(5.10a~5.10c)은 thumb-reach가 어려운 위치(화면 상단). 사용 빈도가 높은 5.11/5.12가 아래 행에 위치하여 실용상 OK이나 실 디바이스 확인 필요. 사용자 검증 가이드에 포함.
+
+### 다음 Story (S11)에 영향 줄 컨텍스트
+- 자식 컬렉션 mutation + list query 패턴이 strength_logs / campus_logs에서도 그대로 적용.
+- `pb.filter()` 바인딩 패턴은 모든 list query에서 표준.
+- S11도 row-by-row 저장 + 부분 리셋 패턴 재사용.
+- 종목 selector + 즐겨찾기 (STORIES S11)는 별도 컴포넌트 추출 필요.
+
+### 미해결 follow-up
+- **Lead 그레이드 범위 doc drift**: PRD §3 / STORIES S10 / 구현 3자 정합성 점검.
+- **그레이드 추가 (5.12b/c, V9+)**: 사용자 진척 시 확장. v1.1.
+- **`useActiveSessionId()` 훅 추출**: 호출처 4곳 (홈, active, hangboard, climbing) — 다음 사이클 또는 S11 후 결정.
+- **휴식 타이머 unsynchronized defaultSec prop**: 현재는 prop 변경이 useState 초기값만 영향. 동적 변경 시나리오 없음.
+
+### 브라우저 검증 (Comet MCP 미연결 — 사용자 직접 수행)
+빌드 14/14 정적, HTTP smoke `GET /sessions/active/climbing/` 200. 인터랙티브 검증:
+1. 세션 진입 → 등반 카드 → climbing 페이지.
+2. 모드 토글 (볼더링 ↔ 리드) → 그레이드 자동 디폴트 변경 확인.
+3. 시도 횟수 stepper, 완등 토글(볼더링), 프로젝트 이름, 메모, RPE 입력.
+4. 휴식 타이머(볼더링) 시작 → 3분 후 beep + 진동.
+5. "+ 기록 추가" → 누적 list 갱신, attempts/isSend/notes/rpe만 리셋 확인.
+6. PB admin UI에서 `climbing_logs` row 확인.
+7. Lead 모드에서 9개 그레이드 thumb-reach 확인 (모바일).
+8. 검증 결과를 본 history에 ✅ 한 줄 추가.

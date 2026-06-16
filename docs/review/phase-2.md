@@ -118,3 +118,51 @@
 | 🟢 `Pause` → `Square` 아이콘 | **수용** | 시맨틱 일치. |
 | 🟢 결과 토글 단방향 | **반박** | 빠른 순환 OK, 모바일 UX 트레이드오프. |
 | 🟢 dev SW 등록 | **반박** | 범위 밖. production 동작 검증은 사용자 디바이스에서. |
+
+---
+
+## S10 — 2026-06-17
+
+### Subagent (general-purpose) 원문
+
+종합 평가: **accept-with-fixes (Critical 없음)** — Acceptance criteria(한 손 입력 / DB row 저장) 충족, PRD §3과 일관. PB filter raw 인터폴레이션은 인젝션 위험 0에 가깝지만 SDK가 제공하는 `pb.filter()` 바인딩을 디폴트로.
+
+#### 🟡 Suggested
+- `web/src/lib/climbing.ts:48` raw template literal → `pb.filter("session_id = {:sid}", { sid })`. S11/이후 reference.
+- `web/src/lib/climbing.ts:86-96` Lead 그레이드 범위 — STORIES "5.10D~5.12A" / PRD §3 "5.10D~5.11A" vs 구현 5.10a~5.12a(9개). 의도 확장 여부 확인.
+- `web/src/components/climbing/rest-timer.tsx:32-37` Beep 후 `0:00` 100ms 잔존. onStart에서 `setRemaining(defaultSec)` 명시.
+- `web/src/app/(protected)/sessions/active/climbing/page.tsx:115-140` 모드 토글 roving tabindex 누락.
+
+#### 🟢 Nit
+- RestTimer `onReset`이 `audio.unlock()` 누락 — helper로 통합.
+- 초기 `grade = "V4"` magic literal → `gradesFor()[0]`.
+- queryKey null 분기 단순화.
+- `row.rpe` truthy → `!= null` 명시.
+- Lead 9개 grid-cols-3 thumb-reach — 실 디바이스 확인 권장.
+
+#### 합격 항목
+- `is_send` Lead 강제 false + UI 숨김 + 모드 전환 시 리셋.
+- `project_name` 빈값 키 제거 → PB schema default 활용.
+- `client_id` 멱등 키 (ADR-4 대비).
+- 캐시 무효화 → 저장 후 list refetch.
+- 48dp+ 터치 타겟, GradePicker roving tabindex + radio ARIA.
+- RPE optional, notes/project_name 옵션.
+- useAudioBeep 메모화 → useEffect deps 안정.
+- 한 번만 발화 firedRef.
+- 404/세션 가드 + SSR-safe.
+- aria-live="off" 타이머.
+- 부분 리셋 (attempts/isSend/notes/rpe만) — 같은 프로젝트 반복 시도 워크플로우.
+
+### 본인 수용/반박 판단
+
+| 항목 | 결정 | 사유 |
+| --- | --- | --- |
+| 🟡 `pb.filter()` 바인딩 | **수용** | 인젝션 디폴트 안전성, S11/이후 코드 reference. |
+| 🟡 Lead 그레이드 범위 | **반박 (doc drift)** | 5.10a부터 시작은 워밍업 기록 유연성 위해 의도. PRD/STORIES의 "5.10D~"는 타깃 진척 측정 범위 의미로 해석. drift는 history에 명시. |
+| 🟡 RestTimer 0:00 잔존 | **수용** | onStart에서 `setRemaining(defaultSec)` 추가. |
+| 🟡 모드 토글 roving tabindex | **수용** | |
+| 🟢 RestTimer onReset unlock | **수용** | `startFresh` helper로 통합. |
+| 🟢 초기 grade magic literal | **수용** | `gradesFor("Bouldering")[0]`. |
+| 🟢 queryKey null 분기 | **수용** | `enabled`만으로 충분. |
+| 🟢 `row.rpe != null` | **수용** | |
+| 🟢 Lead thumb-reach | **사용자 위임** | 실 디바이스 검증 가이드에 포함. |
