@@ -178,7 +178,7 @@
 - [ ] `https://<domain>/_/` admin UI 접근
 - [ ] `curl -w "%{time_total}"` 한국에서 측정 기록
 
-### S14 — PocketBase 자동 백업 ⬜
+### S14 — PocketBase 자동 백업 ✅
 **Goal:** SQLite + uploads를 Cloudflare R2로 일 1회 백업.
 **Dependencies:** S13
 **Tasks:**

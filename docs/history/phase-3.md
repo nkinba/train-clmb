@@ -63,3 +63,62 @@ SQLite WAL 모드 특성상 stop-tar-start는 silently corrupt 위험. PocketBas
 - 임시 컨테이너 실행: `/api/health` 200, `id` → `uid=100(pb)`, `/pb_data` owner `pb`.
 - `docker compose -f infra/prod/docker-compose.prod.yml config` — syntax OK.
 - `caddy validate /etc/caddy/Caddyfile` — **Valid configuration** (경고 0).
+
+---
+
+## S14 — 2026-06-17 (commit <pending>)
+
+### 변경 파일 요약
+- `infra/prod/backup/Dockerfile` *(신규)* — alpine + curl + rclone + jq + unzip + tzdata, 비-root user `backup`, ENV 기본 `BACKUP_HOUR_UTC=19`/`BACKUP_MINUTE_UTC=0`/`BACKUP_ON_START=0`.
+- `infra/prod/backup/backup.sh` *(신규)* — PB admin API auth → POST /api/backups → 다운로드 → unzip -t 무결성 검증 → R2 `auto/` sub-prefix 업로드 → PB 측 zip 삭제 → 잔여 zip 카운트 로그 → R2 30일 cleanup. 실패 시 옵션 webhook 알림.
+- `infra/prod/backup/entrypoint.sh` *(신규)* — daily sleep-loop, BACKUP_ON_START 기본 0.
+- `infra/prod/docker-compose.prod.yml` — backup 서비스 추가 (internal network, depends_on PB healthy, R2_PREFIX/BACKUP_ALERT_WEBHOOK 환경변수).
+- `infra/prod/.env.prod.example` — PB_ADMIN_*, R2_*, R2_PREFIX, BACKUP_ALERT_WEBHOOK placeholder.
+- `docs/RUNBOOK.md` — §7.0 자동 백업 개요, §7.3 R2 셋업 (버킷/토큰/lifecycle prefix `auto/`/.env/첫 백업 검증), §7.4 복원 리허설 (admin API / pb_data unzip 두 경로), §6.1 백업 실패 주간 점검, §6.4 PB 업그레이드 시 backup 호환성 점검.
+- `docs/STORIES.md` — S14 → ✅ Done.
+- `docs/review/phase-3.md` — S14 self-review append.
+
+### 주요 의사결정·트레이드오프
+
+#### 1. PB admin API 경유 (WAL 일관성)
+S13 history의 메모대로 `POST /api/backups`가 PB 서버 내부에서 일관 zip을 만들어줌. 수동 tar(stop-tar-start)의 WAL race 위험 회피. 비용은 PB admin 자격증명을 backup 컨테이너에 노출 — internal network + non-root user로 표면 최소화.
+
+#### 2. R2 sub-prefix 격리 (`auto/`)
+backup 객체를 `r2:${R2_BUCKET}/auto/climb-forge-*.zip`에 격리. rclone cleanup도 `auto/` 안에서만 동작 → 같은 버킷에 수동 백업/임시 객체가 섞여도 영향 분리. R2 lifecycle 룰의 prefix도 `auto/`로 일치.
+
+#### 3. zip 무결성 검증
+다운로드 후 `unzip -t`로 정합성 빠르게 검증. 깨진 zip이 R2에 영구화되는 시나리오(부분 다운로드, PB finalize race) 방지. Dockerfile에 unzip 추가.
+
+#### 4. 옵션 webhook 알림
+`BACKUP_ALERT_WEBHOOK` 환경변수가 설정되어 있으면 단계별 실패 시 Slack/Discord/Telegram 호환 JSON `{"text":"..."}` POST. 미설정 시 silent → RUNBOOK §6.1의 주 1회 grep 권장 절차로 대체.
+
+#### 5. 진단 로그 강화
+- step 1(admin auth): 실패 시 응답 본문 head 200자 출력 (token redacted).
+- step 2(create snapshot): 응답을 임시 파일로 받아 실패 시 head 200자 출력.
+- step 5: PB 잔여 zip 개수 로그 (디스크 누적 모니터링).
+
+#### 6. BACKUP_ON_START 기본 0
+Dockerfile ENV + entrypoint default 모두 0. compose도 0. 검증 시는 명시 override (`BACKUP_ON_START=1 docker compose up backup`). reviewer 지적한 "이미지 기본 1 vs compose 기본 0" 불일치 footgun 해소.
+
+#### 7. UTC 기준 스케줄
+sleep-loop가 UTC 기준 다음 BACKUP_HOUR_UTC/MINUTE_UTC까지 계산. KST 04:00 = UTC 19:00. DST/윤초 무관. 컨테이너 재시작 시 다음 실행 시각만 다시 계산되어 중복 실행 없음.
+
+### 다음 Story (S15)에 영향 줄 컨텍스트
+- 자동 백업이 운영 중이므로 S15 (Cloudflare Pages 배포)에서 PB 도메인 ↔ 프론트 도메인 CORS 설정 시 백업 트래픽 영향 없음 (internal network).
+- BACKUP_ALERT_WEBHOOK은 S16(분석/대시보드)에서 다른 알림 채널과 통합 가능.
+
+### 미해결 follow-up (사용자 위임)
+- **복원 리허설 실 수행** — 별도 staging VM(또는 macOS Docker)에서 RUNBOOK §7.4 절차로 1회 검증 + history에 ✅ 한 줄 기록.
+- **R2 lifecycle 룰 적용** — Cloudflare dashboard에서 prefix `auto/` 30일 삭제 룰 추가 (UI 작업, code 외).
+- **webhook URL 설정** — 알림 채널 (Slack/Discord 등) 선정 + `.env`에 추가.
+- **docker compose secrets 이관 (v1.1)** — 자격증명을 file mount + ENV로 분리. 모니터링 에이전트 도입 시 노출 표면 ↓.
+
+### 로컬에서 검증 완료
+- `docker build infra/prod/backup` — alpine + 도구 풀세트, 비-root user.
+- `docker compose -f infra/prod/docker-compose.prod.yml config` — 3개 서비스 인식, 환경변수 fail-fast 작동.
+- 컨테이너 단독 실행: 환경변수 누락 시 `PB_INTERNAL_URL required`로 명확한 fail, 컨테이너 죽지 않고 다음 19:00 UTC sleep 정확히 계산.
+- 기본 `BACKUP_ON_START=0` 적용 — 즉시 실행 없이 sleep으로 들어감.
+
+### 사용자 위임 (실 R2/도메인 필요)
+- Acceptance criteria의 "백업 객체가 R2에 존재" — 실 R2 버킷/토큰 발급 후 RUNBOOK §7.3 절차로 첫 백업 + R2 console 확인.
+- "복원 절차 문서화" — RUNBOOK §7.4로 충족. 실 리허설은 별도 staging.

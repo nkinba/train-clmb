@@ -203,6 +203,13 @@ cd /opt/climb-forge/infra/prod
 docker compose -f docker-compose.prod.yml logs -f --tail 100
 ```
 
+**백업 실패 주간 점검** (BACKUP_ALERT_WEBHOOK 미설정 시):
+
+```bash
+docker compose -f docker-compose.prod.yml logs --since 7d backup | grep -E 'FAILED|ERROR'
+# 빈 출력이면 OK. 항목이 보이면 해당 timestamp 로그 풀로 확인 + 자격증명/R2/PB endpoint 점검.
+```
+
 ### 6.2 재시작
 
 ```bash
@@ -246,11 +253,33 @@ docker compose -f docker-compose.prod.yml up -d
 
 ⚠️ v0.23+로 점프 시 `Dao` → `app` API 변경이 마이그레이션을 깨뜨릴 수 있음. 미리 별도 인스턴스에서 검증.
 
+⚠️ **백업 컨테이너 호환성** — v0.23+에서 admin 컬렉션이 `_superusers`로 통합되며 `/api/admins/auth-with-password` endpoint와 `Authorization` 헤더 형식이 변경됨. 업그레이드 후 다음 19:00 UTC 백업이 silent fail하지 않도록 즉시 검증:
+
+```bash
+docker compose -f docker-compose.prod.yml logs --tail 100 backup
+# 또는 BACKUP_ON_START=1로 즉시 1회 실행해 호환성 확인:
+BACKUP_ON_START=1 docker compose -f docker-compose.prod.yml up -d backup
+```
+
+깨진 경우 `infra/prod/backup/backup.sh`의 auth endpoint·Authorization 헤더를 업데이트.
+
 ---
 
-## 7. 백업 (S14 — 자동화 별도)
+## 7. 백업
 
-### 7.1 PocketBase admin API (권장 — WAL 일관성 보장)
+### 7.0 자동 일일 백업 (S14, ADR-6)
+
+`infra/prod/backup/` 컨테이너가 매일 04:00 KST(=19:00 UTC)에 다음을 수행:
+
+1. PocketBase admin API `POST /api/admins/auth-with-password` 토큰 발급
+2. `POST /api/backups` — PB 서버 측에서 WAL 일관성 보장 zip 생성
+3. zip 다운로드 → **Cloudflare R2** 업로드 (rclone, S3 호환)
+4. PB 서버 측 zip 정리 (디스크 절약)
+5. R2 30일 이전 객체 cleanup (lifecycle 룰의 이중 안전망)
+
+스케줄/대상 변경은 `.env`의 `BACKUP_HOUR_UTC` / `BACKUP_MINUTE_UTC` / `R2_BUCKET`.
+
+### 7.1 PocketBase admin API (수동, 권장 — WAL 일관성 보장)
 
 PocketBase는 내부에서 일관 스냅샷 zip을 만들어주는 admin API를 제공한다. SQLite WAL이 안전하게 체크포인트된 상태로 묶이기 때문에 **수동 tar보다 안전**.
 
@@ -294,7 +323,128 @@ sudo chown -R 100:101 data/pb_data    # 비-root user 권한 복원
 docker compose -f docker-compose.prod.yml start pocketbase
 ```
 
-자동 일일 백업(R2)은 **S14**에서 추가. 30일 보관, 복원 리허설 1회 권장.
+### 7.3 R2 셋업 (자동 백업 처음 띄울 때 1회)
+
+#### 7.3.1 버킷 생성
+
+Cloudflare Dashboard → R2 → **Create bucket**:
+- 이름: `climb-forge-backups` (또는 원하는 값 — `.env`의 `R2_BUCKET`과 일치).
+- 위치: Automatic 또는 가까운 region (EU/APAC).
+
+#### 7.3.2 API 토큰 발급
+
+R2 → **Manage API Tokens** → **Create API token**:
+- Permission: **Object Read & Write**
+- Specify bucket: `climb-forge-backups` 단일 선택 (다른 버킷에 영향 차단).
+- TTL: 만료 없음 (운영) 또는 1년 (보안 강화).
+- Generate → 보이는 **Access Key ID** / **Secret Access Key** / **Account ID**를 1Password 등에 즉시 저장. 한 번만 표시됨.
+
+#### 7.3.3 30일 lifecycle 룰
+
+R2 → 버킷 선택 → **Settings → Object lifecycle rules → Add rule**:
+- Prefix: `auto/` (백업 컨테이너가 객체를 `auto/climb-forge-*.zip`에 격리해 cleanup 범위를 좁힘).
+- Action: **Delete objects** after **30 days**.
+
+rclone의 `--min-age 30d` cleanup이 이중 안전망(같은 `auto/` 안에서만 동작)이지만, R2 lifecycle 룰이 우선이라 부담을 R2 측에 위임 (장애 시에도 동작 보장). 같은 버킷에 수동 백업 등 다른 파일을 둘 경우 다른 prefix(예: `manual/`) 사용 권장.
+
+#### 7.3.4 `.env` 설정 + 컨테이너 재시작
+
+```bash
+cd /opt/climb-forge/infra/prod
+vi .env   # R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+          # PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD 채움.
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build backup
+```
+
+#### 7.3.5 첫 백업 검증
+
+```bash
+# 컨테이너 시작 + 즉시 1회 실행 (BACKUP_ON_START=1 환경변수로 한 번만):
+BACKUP_ON_START=1 docker compose -f docker-compose.prod.yml --env-file .env up -d --build backup
+docker compose -f docker-compose.prod.yml logs --tail 50 backup
+```
+
+성공 로그 예시:
+
+```
+[...Z] START backup climb-forge-20260617-110000.zip
+[...Z] auth admin
+[...Z] create snapshot climb-forge-20260617-110000.zip
+[...Z] download climb-forge-20260617-110000.zip
+[...Z] snapshot size: 24576 bytes
+[...Z] upload to r2://climb-forge-backups/climb-forge-20260617-110000.zip
+[...Z] cleanup PB server-side snapshot
+[...Z] cleanup R2 backups older than 30d
+[...Z] OK backup completed climb-forge-20260617-110000.zip
+```
+
+R2 console에서 객체 존재 확인.
+
+이후 `BACKUP_ON_START=0`(또는 미설정)로 되돌리고 재시작:
+
+```bash
+unset BACKUP_ON_START
+docker compose -f docker-compose.prod.yml --env-file .env up -d backup
+```
+
+### 7.4 복원 리허설 (1회 권장, S14 acceptance)
+
+복원 절차의 신뢰성은 **실제로 한 번 해본 다음**에만 보장됨. **별도 staging VM(또는 로컬 macOS Docker)**에서 다음을 1회 수행하고 결과를 `docs/history/phase-3.md`에 기록:
+
+#### 7.4.1 R2에서 백업 zip 다운로드
+
+```bash
+# 로컬 또는 별도 VM에서
+docker run --rm \
+  -e RCLONE_CONFIG_R2_TYPE=s3 \
+  -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+  -e RCLONE_CONFIG_R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID \
+  -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY \
+  -e RCLONE_CONFIG_R2_ENDPOINT=https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com \
+  -e RCLONE_CONFIG_R2_REGION=auto \
+  -v "$PWD:/data" \
+  rclone/rclone:latest copy r2:climb-forge-backups/<백업파일명> /data/
+```
+
+#### 7.4.2 PB 인스턴스에 복원
+
+격리된 staging compose로 띄운 PB에 admin 인증 + `POST /api/backups/upload` + `POST /api/backups/restore`:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8090/api/admins/auth-with-password \
+  -H "Content-Type: application/json" \
+  -d '{"identity":"<ADMIN>","password":"<PW>"}' | jq -r .token)
+
+# zip 업로드
+curl -s -X POST http://localhost:8090/api/backups/upload \
+  -H "Authorization: $TOKEN" \
+  -F "file=@<백업파일명>"
+
+# 복원 (PB가 자동 재시작됨)
+curl -s -X POST http://localhost:8090/api/backups/<백업파일명>/restore \
+  -H "Authorization: $TOKEN"
+```
+
+또는 더 단순한 경로 — pb_data 디렉토리 자체를 zip에서 직접 추출:
+
+```bash
+docker compose stop pocketbase
+sudo rm -rf data/pb_data
+sudo unzip <백업파일명> -d data/pb_data
+sudo chown -R 100:101 data/pb_data
+docker compose start pocketbase
+```
+
+#### 7.4.3 검증
+
+복원된 인스턴스의 `https://<staging-domain>/_/`에 admin 로그인 → `sessions` 등 컬렉션에 운영 row가 보이면 OK. user 자격증명도 그대로 동작해야 함.
+
+리허설 후 한 줄 기록:
+
+```bash
+# docs/history/phase-3.md S14 섹션에:
+# ✅ 복원 리허설 완료 (2026-XX-XX). 백업 zip → staging 복원 → admin/user/session row 일치 확인.
+```
 
 ---
 

@@ -1,18 +1,20 @@
-# Climb-Forge 운영 환경 (ADR-6, ADR-8 / S13)
+# Climb-Forge 운영 환경 (ADR-6, ADR-8 / S13, S14)
 #
 # 구성:
 #   pocketbase: ../pocketbase/Dockerfile로 빌드. internal 네트워크만 노출.
 #   caddy:      80/443 호스트 바인딩. 자동 SSL(Let's Encrypt). PB로 reverse proxy.
+#   backup:     일일 백업 (S14). PB admin API → R2 업로드 → 30일 cleanup.
 #
 # 실행 (VM에서):
 #   cd /opt/climb-forge/infra/prod
-#   cp .env.prod.example .env && vi .env       # DOMAIN, ACME_EMAIL 채움
+#   cp .env.prod.example .env && vi .env       # DOMAIN, ACME_EMAIL, R2_*, PB_ADMIN_* 채움
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d
 #
 # 검증:
-#   docker compose ps           # 두 컨테이너 healthy 확인
+#   docker compose ps           # 세 컨테이너 healthy 확인
 #   curl https://$DOMAIN/api/health
 #   브라우저 https://$DOMAIN/_/  → admin UI
+#   docker compose logs backup  # 첫 백업 결과 (BACKUP_ON_START=1)
 
 services:
   pocketbase:
@@ -62,9 +64,45 @@ services:
       - internal
       - public
 
+  backup:
+    build:
+      context: ./backup
+    image: climb-forge-backup:s14
+    container_name: climb-forge-backup
+    restart: unless-stopped
+    # 컨테이너 내부 PB 접근 — internal 네트워크.
+    networks:
+      - internal
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    environment:
+      # PB 내부 URL — service name + 8090 (internal network).
+      PB_INTERNAL_URL: http://pocketbase:8090
+      PB_ADMIN_EMAIL: ${PB_ADMIN_EMAIL:?PB_ADMIN_EMAIL required (백업이 PB admin API를 호출)}
+      PB_ADMIN_PASSWORD: ${PB_ADMIN_PASSWORD:?PB_ADMIN_PASSWORD required}
+      # 백업 스케줄 (UTC). 04:00 KST = 19:00 UTC (전날). RUNBOOK §7.3.
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-19}
+      BACKUP_MINUTE_UTC: ${BACKUP_MINUTE_UTC:-0}
+      # 첫 시작 시 즉시 1회 실행 (검증/테스트용).
+      # 운영 기본 0 — 검증 시는 `BACKUP_ON_START=1 docker compose ... up backup` 명시 override.
+      BACKUP_ON_START: ${BACKUP_ON_START:-0}
+      # 실패 시 옵션 webhook 알림 (Slack/Discord/Telegram 등). 비어있으면 silent.
+      BACKUP_ALERT_WEBHOOK: ${BACKUP_ALERT_WEBHOOK:-}
+      # R2 (Cloudflare) — S3 호환. rclone은 RCLONE_CONFIG_* 환경변수만으로 동작.
+      R2_BUCKET: ${R2_BUCKET:?R2_BUCKET required}
+      # 백업 객체가 R2에 격리될 sub-prefix. 동일 버킷의 다른 객체와 cleanup 영향 분리.
+      R2_PREFIX: ${R2_PREFIX:-auto}
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID required}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY required}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:?R2_ACCOUNT_ID required}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_REGION: auto
+
 networks:
   internal:
-    # Caddy ↔ PocketBase. 외부 접근 차단.
+    # Caddy ↔ PocketBase ↔ backup. 외부 접근 차단.
     driver: bridge
   public:
     # Caddy ↔ 외부. host 80/443.
