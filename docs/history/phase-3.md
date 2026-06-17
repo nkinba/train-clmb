@@ -125,7 +125,7 @@ sleep-loop가 UTC 기준 다음 BACKUP_HOUR_UTC/MINUTE_UTC까지 계산. KST 04:
 
 ---
 
-## Phase 3 follow-up — ADR-2 갱신 (DDNS 옵션) — 2026-06-17 (commit <pending>)
+## Phase 3 follow-up — ADR-2 갱신 (DDNS 옵션) — 2026-06-17 (commit f225151)
 
 ### 배경
 
