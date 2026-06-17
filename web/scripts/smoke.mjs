@@ -144,10 +144,14 @@ async function runAuth(browser) {
     try { return JSON.parse(pbAuthRaw)?.token ?? null; } catch { return null; }
   })();
 
-  // [smoke-cleanup] 태그 세션 1개 생성 → localStorage activeId 주입 → /sessions/active/* 캡쳐.
+  // [smoke-cleanup] 태그 세션 1개 생성 + climbing log 1개 추가
+  // → localStorage activeId 주입 → /sessions/active/* + /logs/detail 캡쳐.
   const createdSessionId = await createSmokeSession(pbToken);
   if (!createdSessionId) {
     failures.push("smoke session create failed — /sessions/active/* 캡쳐 skip");
+  }
+  if (createdSessionId) {
+    await createSmokeClimbingLog(pbToken, createdSessionId);
   }
 
   // 인증된 페이지 순회.
@@ -160,10 +164,19 @@ async function runAuth(browser) {
     { label: "a08-hangboard", path: "/sessions/active/hangboard/" },
     { label: "a09-climbing", path: "/sessions/active/climbing/" },
     { label: "a10-strength", path: "/sessions/active/strength/" },
+    // /logs/detail은 sessionId 쿼리 파라미터가 필요.
+    {
+      label: "a11-logs-detail",
+      path: createdSessionId ? `/logs/detail/?id=${createdSessionId}` : null,
+    },
   ];
 
   try {
     for (const r of AUTH_ROUTES) {
+      if (!r.path) {
+        logStep({ skip: r.label, reason: "path null (sessionId 없음)" });
+        continue;
+      }
       const p = await browser.newPage();
       await p.setViewport(VIEWPORT);
       // puppeteer 새 페이지에 PB 토큰 + 활성 세션 ID 주입 (LocalAuthStore는 페이지 간 공유 X).
@@ -201,6 +214,30 @@ async function pbFetch(path, init = {}, token) {
   let body;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   return { status: r.status, ok: r.ok, body };
+}
+
+async function createSmokeClimbingLog(token, sessionId) {
+  if (!token || !sessionId) return null;
+  const payload = {
+    client_id: `smoke-cl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    session_id: sessionId,
+    type: "Bouldering",
+    grade: "V4",
+    attempts: 3,
+    is_send: true,
+    rpe: 7,
+  };
+  const res = await pbFetch(
+    "/api/collections/climbing_logs/records",
+    { method: "POST", body: JSON.stringify(payload) },
+    token,
+  );
+  if (!res.ok) {
+    logStep({ smokeClimbingLog: "fail", status: res.status, body: res.body });
+    return null;
+  }
+  logStep({ smokeClimbingLog: "ok", id: res.body?.id });
+  return res.body?.id ?? null;
 }
 
 async function createSmokeSession(token) {

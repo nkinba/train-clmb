@@ -39,7 +39,9 @@ export default function LogsPage() {
   }, []);
 
   const applyFilter = () => {
-    setAccumulated([]);
+    // setAccumulated을 여기서 비우면 빈 draft로 검색 시 queryKey가 동일해
+    // list.data가 캐시 hit으로 재발화 안 되고 accumulated만 빈 상태로 멈춤.
+    // → useEffect가 list.data를 보고 page=1일 때 자동 덮어쓰기에 위임.
     setFilter({
       page: 1,
       perPage: PER_PAGE,
@@ -52,7 +54,6 @@ export default function LogsPage() {
 
   const resetFilter = () => {
     setDraft({ dateFrom: "", dateTo: "", location: "", target: "" });
-    setAccumulated([]);
     setFilter({ page: 1, perPage: PER_PAGE });
   };
 
@@ -61,10 +62,14 @@ export default function LogsPage() {
   };
 
   // 새 페이지 도착 시 accumulated에 합치기 (id 기준 중복 제거).
+  // page=1일 때는 항상 fresh로 덮어쓰기 — 빈 검색이든 캐시 hit이든 list.data가 표시.
   useEffect(() => {
     if (!list.data) return;
+    if (filter.page === 1) {
+      setAccumulated(list.data.items);
+      return;
+    }
     setAccumulated((prev) => {
-      if (filter.page === 1) return list.data.items;
       const seen = new Set(prev.map((r) => r.id));
       return [...prev, ...list.data.items.filter((r) => !seen.has(r.id))];
     });
