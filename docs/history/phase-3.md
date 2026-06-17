@@ -66,7 +66,7 @@ SQLite WAL 모드 특성상 stop-tar-start는 silently corrupt 위험. PocketBas
 
 ---
 
-## S14 — 2026-06-17 (commit <pending>)
+## S14 — 2026-06-17 (commit 571b472)
 
 ### 변경 파일 요약
 - `infra/prod/backup/Dockerfile` *(신규)* — alpine + curl + rclone + jq + unzip + tzdata, 비-root user `backup`, ENV 기본 `BACKUP_HOUR_UTC=19`/`BACKUP_MINUTE_UTC=0`/`BACKUP_ON_START=0`.
