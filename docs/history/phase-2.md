@@ -403,7 +403,7 @@ PB schema가 sessions → 4개 child collection에 `cascadeDelete: true` 적용 
 
 ---
 
-## S16 — 2026-06-18 (commit <pending>)
+## S16 — 2026-06-18 (commit 580eb04)
 
 > Phase 4(v1.1)였던 분석 화면을 사용자가 즉시 보고 싶다고 요청 — Phase 2 후미로 당김.
 
