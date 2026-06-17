@@ -190,7 +190,7 @@
 - [ ] 백업 객체가 R2에 존재
 - [ ] 복원 절차 `docs/RUNBOOK.md`에 문서화
 
-### S15 — VM Caddy 정적 서빙 + 배포 파이프라인 ⬜
+### S15 — VM Caddy 정적 서빙 + 배포 파이프라인 ✅
 **Goal:** PB와 같은 VM의 Caddy에서 `out/` 정적 서빙, main 푸시 시 자동 빌드·배포 (ADR-3 결정 변경, 2026-06-17).
 **Dependencies:** S04, S13
 **Tasks:**

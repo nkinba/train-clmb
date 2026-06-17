@@ -93,3 +93,65 @@
 | 🟡 복원 리허설 실 수행 | **반박 (사용자 위임)** | 별도 staging VM 필요. 절차는 RUNBOOK §7.4에 명시, 실 수행/기록은 사용자 위임. history에 placeholder. |
 | 🟢 secrets 이관 / 확장자 통일 / DST | **반박** | 1인 운영 현 단계 충분. |
 | 🟢 compose 주석 보완 | **수용** | 한 줄 추가. |
+
+---
+
+## S15 — 2026-06-17
+
+### Subagent (general-purpose) 원문
+
+종합 평가: **accept-with-fixes** — 두 hostname Caddy 블록 + rsync 배포 + GitHub Actions 골격은 견고하고 ADR-3와 정합. 단 (a) 스모크 체크 의미 없음, (b) infra/prod README + RUNBOOK 일부 `DOMAIN` 잔재, (c) rsync 중간 상태 윈도우 등 보강 권장.
+
+#### 🔴 Critical 없음.
+
+#### 🟡 Suggested
+- **S1.** `deploy-frontend.yml` 스모크 체크가 `DEPLOY_HOST`(IP) HTTPS 직접 호출 → SNI mismatch. 게다가 `|| echo`로 fail 삼킴 → CI 시그널 0. `vars.APP_DOMAIN`(공개 변수)로 진짜 URL 호출 + 실패 시 빨갛게.
+- **S2.** rsync `--delete` → `--delete-after`로 변경. 새 자산 전송 후 옛 파일 삭제 → chunk 404 윈도우 회피.
+- **S3.** `concurrency: cancel-in-progress: true` mid-rsync 중단 시 broken state. S2 해법으로 해결.
+- **S4.** `infra/prod/README.md` 여러 곳 `DOMAIN` → `PB_DOMAIN`/`APP_DOMAIN`.
+- **S5.** `docs/RUNBOOK.md` `<DOMAIN>` 다수 → `<PB_DOMAIN>` 일관화.
+- **S6.** `try_files` 마지막 `/404.html`가 200 status로 fallback 서빙 → `handle_errors` 패턴으로 404 status 유지.
+- **S7.** `/icon.svg` 1년 immutable cache → PWA manifest 참조라 즉시 반영 필요. `no_cache` 그룹으로 이동.
+- **S8.** CSP `'unsafe-inline'`이 Next.js RSC 인라인 페이로드 때문에 불가피 — 주석으로 의도 명시 + 향후 hash 기반 좁힘 follow-up.
+- **S9.** 첫 부팅 시 `data/app/` 비어있음 → 빈 응답 정상 신호 (인증서는 발급됨). RUNBOOK 장애 대응에 한 줄.
+- **S10.** Caddy 비-root user hardening 시 `app` mount 권한 검토 — 우선순위 낮음.
+
+#### 🟢 Nit
+- N1. `@html path *.html /` 의 `/` 잉여 (rewrite 후 동일 매칭).
+- N2. `__next.*.txt` RSC manifest 노출 — 무해.
+- N3. workflow `actions: read` permission 추가 가능 — 필수 X.
+- N4. `webfactory/ssh-agent@v0.9.1` ecosystem 표준.
+- N5. `cache: pnpm` + `cache-dependency-path: web/pnpm-lock.yaml` 정합.
+- N6. RUNBOOK §8.4 캐시 무효화 표현 일관성.
+- N7. favicon.ico 명시 cache 없음 — 무해.
+
+#### 합격 항목
+- 두 hostname 분리 + 자동 SSL + HTTP/3 + 보안 헤더 풀세트 (HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, CSP).
+- `{$PB_DOMAIN}` placeholder가 CSP `connect-src`에 정상 보간.
+- `frame-ancestors 'none'`이 APP_DOMAIN에만 적용 → PB admin UI 충돌 없음.
+- `trailingSlash: true` + `try_files` + `file_server` 호환.
+- `${PB_DOMAIN:?}`/`${APP_DOMAIN:?}` fail-fast.
+- read-only mount (`/srv/app:ro`).
+- 권한 부트스트랩(`chown -R "$USER:$USER" data/app`).
+- GitHub Actions 최소 권한 (`permissions: contents: read`).
+- `NEXT_PUBLIC_PB_URL` 빌드 시점 주입 (공개 의도).
+- `--frozen-lockfile` 재현 가능 빌드.
+- `ssh-keyscan` + `StrictHostKeyChecking=yes` 흐름.
+- `pnpm build` 15/15 static pages.
+- 인증서 발급 부담 무관 (도메인 2개).
+
+### 본인 수용/반박 판단
+
+| 항목 | 결정 | 사유 |
+| --- | --- | --- |
+| 🟡 S1 스모크 체크 의미화 | **수용** | `vars.APP_DOMAIN`(공개 변수) + 빈 값이면 skip + 있으면 fail-fast. |
+| 🟡 S2 `--delete-after` | **수용** | 단순 1줄, 보안성·중단 윈도우 양쪽 개선. |
+| 🟡 S3 concurrency | **반박** | S2 해법으로 자동 해결. 별도 처리 불필요. |
+| 🟡 S4 infra/prod README DOMAIN | **수용** | PB_DOMAIN/APP_DOMAIN 일관. |
+| 🟡 S5 RUNBOOK `<DOMAIN>` | **수용** | sed 일괄 갱신. dig 명령에 APP_DOMAIN 추가. |
+| 🟡 S6 handle_errors 404 status | **수용** | SEO/PWA 정확성. |
+| 🟡 S7 icon.svg 캐시 그룹 변경 | **수용** | manifest 참조 즉시 반영. |
+| 🟡 S8 CSP 주석 | **수용** | 한 줄 주석 + v1.1 hash 좁힘 follow-up 명시. |
+| 🟡 S9 RUNBOOK 한 줄 | **수용** | §9.1 인증서 발급 실패 다음 빈 응답 정상 신호 noteshu. |
+| 🟡 S10 Caddy non-root | **반박/follow-up** | 우선순위 낮음, v1.1 검토. |
+| 🟢 N1-N7 | **무시** | 무해 또는 우선순위 낮음. |

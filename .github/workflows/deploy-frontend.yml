@@ -1,0 +1,94 @@
+# Climb-Forge 프론트 자동 배포 (S15)
+#
+# main 브랜치에 `web/` 변경 푸시 시:
+#   1) pnpm 캐시 활용 install
+#   2) NEXT_PUBLIC_PB_URL 환경변수 빌드 시점 주입 후 `pnpm build`
+#   3) SSH key로 VM에 rsync (--delete로 옛 자산 정리)
+#
+# GitHub Secrets (Settings → Secrets and variables → Actions):
+#   NEXT_PUBLIC_PB_URL  https://<PB_DOMAIN>
+#   DEPLOY_SSH_KEY      ED25519 private key 전문
+#   DEPLOY_HOST         VM 외부 IP 또는 hostname
+#   DEPLOY_USER         SSH user
+#   DEPLOY_PATH         /opt/climb-forge/data/app
+
+name: Deploy frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+# 같은 ref에서 새 push가 들어오면 이전 빌드 취소 (Caddy로 가는 자산이 항상 최신).
+concurrency:
+  group: deploy-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: web
+
+      - name: Build static export
+        env:
+          NEXT_PUBLIC_PB_URL: ${{ secrets.NEXT_PUBLIC_PB_URL }}
+        run: pnpm build
+        working-directory: web
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add VM to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync to VM
+        # --delete-after: 새 자산 전부 전송된 후에 옛 파일 삭제 → 인덱스가 새 chunks를
+        # 가리키기 전에 옛 chunks가 사라지는 윈도우 회피.
+        run: |
+          rsync -avz --delete-after \
+            -e "ssh -o StrictHostKeyChecking=yes" \
+            web/out/ \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      - name: Smoke check
+        # APP_DOMAIN은 secret이 아닌 vars(공개)로 관리하면 Acceptance Criteria
+        # "30초 내 새 콘텐츠 반영"을 자동 검증 가능.
+        # vars.APP_DOMAIN이 비어있으면 skip (운영자 셋업 전 단계).
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+        run: |
+          if [ -z "$APP_DOMAIN" ]; then
+            echo "vars.APP_DOMAIN unset — smoke check skipped (set in repo Variables to enable)."
+            exit 0
+          fi
+          curl -fsS --max-time 15 "https://${APP_DOMAIN}/" -o /dev/null
+          curl -fsS --max-time 15 "https://${APP_DOMAIN}/manifest.webmanifest" -o /dev/null

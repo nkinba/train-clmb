@@ -1,12 +1,13 @@
 # prod — Climb-Forge 운영 인프라
 
-PocketBase + Caddy(자동 SSL) 2-컨테이너 구성. ADR-2, ADR-6, ADR-8.
+PocketBase + Caddy(자동 SSL) + 백업 + **프론트 정적 서빙(S15)** 운영 컨테이너 구성. ADR-2, ADR-3, ADR-6, ADR-8.
 
-처음 띄우기: **`docs/RUNBOOK.md`** 참조 (VM 프로비저닝 / 도메인 또는 DDNS / 첫 부팅).
+처음 띄우기: **`docs/RUNBOOK.md`** 참조 (VM 프로비저닝 / 도메인 또는 DDNS / 첫 부팅 / 프론트 배포).
 
-도메인은 두 가지 옵션 모두 코드 차이 없음 — `.env`의 `DOMAIN=`만 다르게 (RUNBOOK §3):
-- 커스텀 도메인 (예: `pb.your-domain.com`) — $10/년대.
-- 무료 DDNS (예: `<sub>.duckdns.org`) — 0원, URL 미관 양보.
+두 hostname 운영 (RUNBOOK §3):
+- `PB_DOMAIN` — PocketBase API + admin UI (예: `pb.your-domain.com` / `<sub-pb>.duckdns.org`)
+- `APP_DOMAIN` — 프론트 정적 자산 (예: `app.your-domain.com` / `<sub-app>.duckdns.org`)
+어느 옵션이든 코드 차이 없음 — `.env`만 다르게.
 
 ## 구성
 
@@ -29,7 +30,7 @@ internet ──443──> caddy (public + internal)
 
 - `docker-compose.prod.yml` — compose 정의
 - `Caddyfile` — reverse proxy + TLS + 보안 헤더
-- `.env.prod.example` — DOMAIN, ACME_EMAIL, DATA_DIR 템플릿
+- `.env.prod.example` — PB_DOMAIN/APP_DOMAIN, ACME_EMAIL, DATA_DIR, R2/PB_ADMIN 템플릿
 - `.env` *(gitignore)* — 실제 값
 - `data/` *(gitignore)* — pb_data + caddy 인증서
 
@@ -44,7 +45,8 @@ docker compose -f docker-compose.prod.yml down
 
 # 상태
 docker compose -f docker-compose.prod.yml ps
-curl -fsS https://$DOMAIN/api/health
+curl -fsS https://$PB_DOMAIN/api/health
+curl -fsS https://$APP_DOMAIN/ -o /dev/null   # 프론트 200 확인
 
 # 로그
 docker compose -f docker-compose.prod.yml logs -f --tail 200
@@ -58,10 +60,10 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## 알려진 주의사항
 
-- **CORS**: PocketBase admin UI > Settings > Application > "Allowed origins"에 프론트 도메인을 명시. `*` 그대로 두면 ADR-5의 단일 사용자 가정과 어긋남.
+- **CORS**: PocketBase admin UI > Settings > Application > "Allowed origins"에 `https://${APP_DOMAIN}` 명시. `*` 그대로 두면 ADR-5의 단일 사용자 가정과 어긋남. RUNBOOK §8.3.
 - **admin endpoint 노출**: `/_/`와 `/api/admins/*`는 외부 접근 가능. 자격증명만이 방어선. 사용자 IP가 고정이면 **Caddyfile에 IP allowlist 1회 추가**가 거의 무료의 추가 방어:
   ```caddyfile
-  {$DOMAIN} {
+  {$PB_DOMAIN} {
       @admin {
           path /_/* /api/admins/*
           not remote_ip <HOME_OR_OFFICE_IP>

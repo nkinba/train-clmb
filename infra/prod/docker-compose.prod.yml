@@ -54,8 +54,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${DATA_DIR:-./data}/caddy_data:/data         # ACME 인증서 (영속)
       - ${DATA_DIR:-./data}/caddy_config:/config
+      - ${DATA_DIR:-./data}/app:/srv/app:ro          # 프론트 정적 자산 (S15)
     environment:
-      - DOMAIN=${DOMAIN:?DOMAIN env required (e.g. pb.example.com)}
+      - PB_DOMAIN=${PB_DOMAIN:?PB_DOMAIN env required (e.g. pb.example.com)}
+      - APP_DOMAIN=${APP_DOMAIN:?APP_DOMAIN env required (e.g. app.example.com)}
       - ACME_EMAIL=${ACME_EMAIL:?ACME_EMAIL env required (Let's Encrypt 알림용)}
     depends_on:
       pocketbase:
