@@ -12,13 +12,24 @@
 
 ## ADR 2: 인프라 및 배포 환경 구성
 
-* **상태:** 확정
-* **컨텍스트:** 엔지니어로서의 인프라 경험을 위해 외부 호스팅(SaaS) 대신 직접 서버를 구축하되, 운영 비용을 0원으로 통제해야 함.
-* **결정:** **GCP Compute Engine (e2-micro) + Docker Compose + Caddy**
+* **상태:** 확정 (2026-06-17 도메인/DDNS 옵션 명문화)
+* **컨텍스트:** 엔지니어로서의 인프라 경험을 위해 외부 호스팅(SaaS) 대신 직접 서버를 구축하되, **외부 의존 플랫폼을 늘리지 않으면서** 운영 비용을 최소화해야 함.
+* **결정:** **GCP Compute Engine (e2-micro) + Docker Compose + Caddy**.
+  * 도메인은 두 가지 옵션을 허용 (운영자가 선택, 코드 차이 없음):
+    1. **커스텀 도메인** (예: `pb.example.com`) — 등록업체 약 $10/년. 미관/장기 안정.
+    2. **무료 DDNS** (예: `<sub>.duckdns.org`) — 0원. URL 미관 양보. 단순 DNS resolver라 lock-in이 거의 없음.
 * **근거:**
-  * GCP Always Free 티어인 e2-micro(1 vCPU, 1GB RAM)를 활용하여 비용 0원 달성.
+  * GCP Always Free 티어인 e2-micro(1 vCPU, 1GB RAM)를 활용하여 컴퓨트 비용 0원 달성. **외부 의존 = GCP 하나만** (DDNS는 단순 DNS resolver라 추가 플랫폼 종속으로 간주 안 함).
   * Docker Compose를 통해 로컬 맥미니/맥북 환경과 GCP 운영 환경을 100% 동일하게 구성(IaC 기초).
-  * Caddy 웹 서버를 앞단(Reverse Proxy)에 배치하여 Nginx 대비 적은 설정(Caddyfile)으로 Let's Encrypt 자동 SSL(HTTPS) 발급 처리.
+  * Caddy 웹 서버를 앞단(Reverse Proxy)에 배치하여 Nginx 대비 적은 설정(Caddyfile)으로 Let's Encrypt 자동 SSL(HTTPS) 발급 처리. 발급 단위는 **hostname**이므로 커스텀 도메인이든 DDNS든 동일한 흐름.
+* **검토 후 기각된 대안 (2026-06-17):**
+  * **Supabase free tier** — 도메인 0원이지만 SaaS 회피 의도 정면 위반 + 7일 비활성 시 paused 정책이 단일 사용자 운동 패턴(주 2–3회)과 충돌.
+  * **Fly.io free tier** — `.fly.dev` 자동 hostname으로 도메인 비용 0원이지만 플랫폼 종속 증가 + free tier 정책 변경 이력. 학습 의도 약화.
+  * **Vercel** — 프론트(Next.js) 호스팅에는 적합(ADR-3 검토 대상)이지만 long-running PB는 못 돌림 — 본 ADR 범위 외.
+  * **Cloudflare Tunnel/Containers** — Quick Tunnel은 URL 휘발, Named는 도메인 필요, Containers는 베타 + 가격 모델 미확정.
+* **트레이드오프:**
+  * 비용 0원 절대 달성을 원하면 DDNS 옵션. 미관 양보 + 단일 사용자 운영자만이 hostname 안다는 가정에서 무해.
+  * 커스텀 도메인 선택 시 연 $10가 학습/소유권 가치보다 작은 비용으로 판단.
 
 ## ADR 3: 프론트엔드 프레임워크 및 호스팅
 

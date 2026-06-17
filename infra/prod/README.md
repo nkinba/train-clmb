@@ -2,7 +2,11 @@
 
 PocketBase + Caddy(자동 SSL) 2-컨테이너 구성. ADR-2, ADR-6, ADR-8.
 
-처음 띄우기: **`docs/RUNBOOK.md`** 참조 (VM 프로비저닝 / 도메인 / 첫 부팅).
+처음 띄우기: **`docs/RUNBOOK.md`** 참조 (VM 프로비저닝 / 도메인 또는 DDNS / 첫 부팅).
+
+도메인은 두 가지 옵션 모두 코드 차이 없음 — `.env`의 `DOMAIN=`만 다르게 (RUNBOOK §3):
+- 커스텀 도메인 (예: `pb.your-domain.com`) — $10/년대.
+- 무료 DDNS (예: `<sub>.duckdns.org`) — 0원, URL 미관 양보.
 
 ## 구성
 

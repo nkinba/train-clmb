@@ -122,3 +122,39 @@ sleep-loop가 UTC 기준 다음 BACKUP_HOUR_UTC/MINUTE_UTC까지 계산. KST 04:
 ### 사용자 위임 (실 R2/도메인 필요)
 - Acceptance criteria의 "백업 객체가 R2에 존재" — 실 R2 버킷/토큰 발급 후 RUNBOOK §7.3 절차로 첫 백업 + R2 console 확인.
 - "복원 절차 문서화" — RUNBOOK §7.4로 충족. 실 리허설은 별도 staging.
+
+---
+
+## Phase 3 follow-up — ADR-2 갱신 (DDNS 옵션) — 2026-06-17 (commit <pending>)
+
+### 배경
+
+S14 완료 직후 사용자가 "PB 도메인을 위해 매년 ~$10 지불하는 게 ADR-2의 '비용 0원' 의도와 맞는가?"를 재검토. 동시에 "외부 플랫폼 종속을 늘리고 싶지 않다"는 명확한 제약을 표명.
+
+### 결정 분석
+
+세 가지 대안을 평가:
+- **Supabase free** — 7일 비활성 paused 정책이 단일 사용자 운동 패턴(주 2–3회)과 충돌 + ADR-1/2 폐기.
+- **Fly.io free** — `.fly.dev` 자동 hostname이지만 새 플랫폼 종속.
+- **Cloudflare Tunnel / Containers** — Quick Tunnel URL 휘발, Named는 도메인 필요, Containers 베타.
+- **무료 DDNS (DuckDNS)** — 도메인 0원 + URL 미관 양보. **단순 DNS resolver라 추가 플랫폼 종속으로 간주 안 됨** (코드/데이터 lock-in 없음).
+
+→ 사용자 선택: **A' — GCP+PB 유지 + DDNS 옵션 명문화**. ADR-2 의도(인프라 학습 + 비종속) 정합.
+
+### 변경 파일
+- `docs/ADR.md` — ADR-2 갱신: 컨텍스트에 "외부 의존 플랫폼을 늘리지 않으면서" 명문화, 도메인을 두 옵션(커스텀 / DDNS) 허용, 검토 후 기각 대안 4개 명시, 트레이드오프 정리.
+- `docs/RUNBOOK.md` — §1.4 GCP Static IP 단계 추가 (VM 재시작 시 IP 보존 + DDNS 동기화 단순화), §3 도메인/DNS 섹션을 두 옵션으로 분리 (§3.A 커스텀 도메인 / §3.B DuckDNS 절차 + cron heartbeat).
+- `infra/prod/.env.prod.example` — `DOMAIN` 주석에 두 옵션 모두 명시.
+- `infra/prod/README.md` — 도메인 두 옵션 안내 한 줄.
+
+### 코드/인프라 변경 없음
+
+Caddy/compose/backup 컨테이너 모두 hostname-agnostic이라 코드 변경 없음. 운영자가 `.env`의 `DOMAIN=`을 어떤 형태로 채우든 동일 흐름.
+
+### 다음 Story (S15)에 영향 줄 컨텍스트
+- 프론트 도메인은 `.pages.dev`(또는 `.vercel.app`) 자동 발급. PB 도메인이 DDNS여도 CORS 화이트리스트 설정만 일관되면 무관.
+- ADR-3(프론트 호스팅)도 비슷한 의사결정 검토 가치 있음 — S15 진입 전 ADR-3 재검토 자연스러움.
+
+### 미해결 follow-up
+- ADR-3 재검토 (CF Pages vs Vercel) — S15 진입 직전에 결정.
+- 사용자가 실제 어느 옵션(커스텀/DDNS) 사용할지 — RUNBOOK 따라 진행 후 history에 기록.

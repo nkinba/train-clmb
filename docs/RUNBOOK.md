@@ -44,6 +44,32 @@ gcloud compute firewall-rules create allow-http-https \
 gcloud compute ssh climb-forge-pb --zone=us-west1-a
 ```
 
+### 1.4 Static IP (VM 재시작 시 IP 보존)
+
+VM의 Ephemeral 외부 IP는 재시작 시 변경되어 DNS A 레코드가 깨질 수 있음. Static IP로 승격 — **VM이 켜져 있는 동안은 무료** (Always Free 한도 안).
+
+```bash
+# 1) Static 주소 예약 (현재 VM이 쓰는 ephemeral IP를 그대로 가져옴)
+gcloud compute addresses create climb-forge-pb-ip \
+  --region=us-west1
+
+# 받은 IP 확인
+gcloud compute addresses describe climb-forge-pb-ip --region=us-west1 \
+  --format="get(address)"
+
+# 2) VM의 외부 IP를 Static으로 교체
+gcloud compute instances delete-access-config climb-forge-pb \
+  --zone=us-west1-a \
+  --access-config-name="external-nat"
+
+gcloud compute instances add-access-config climb-forge-pb \
+  --zone=us-west1-a \
+  --access-config-name="external-nat" \
+  --address=<위에서 받은 IP>
+```
+
+⚠️ Static IP를 reserve해두고 **할당된 VM이 없으면 시간당 과금** 시작. VM을 영구 삭제할 때는 같이 `gcloud compute addresses delete climb-forge-pb-ip --region=us-west1` 호출.
+
 ---
 
 ## 2. VM 초기 설정
@@ -91,23 +117,72 @@ git clone https://github.com/<owner>/<repo>.git .
 
 ---
 
-## 3. 도메인 + DNS
+## 3. 도메인 / DNS — 두 옵션 (ADR-2)
 
-### 3.1 도메인 A 레코드
+Caddy는 발급 단위가 **hostname**이라 커스텀 도메인이든 무료 DDNS든 후속 절차는 동일. 어느 쪽이든 `.env`의 `DOMAIN=`만 다르게 채우면 됨.
 
-DNS 관리 콘솔에서 다음 레코드 추가:
+VM 외부 IP는 §1.4 절차 후:
+
+```bash
+gcloud compute addresses describe climb-forge-pb-ip --region=us-west1 --format="get(address)"
+```
+
+### 3.A 커스텀 도메인 (예: `pb.example.com`)
+
+조건: 도메인 등록업체에 도메인 1개 보유 ($10/년대). DNS 관리는 어디서든 가능 (Cloudflare 추천 — 무료).
+
+DNS 관리 콘솔에서 A 레코드 추가:
 
 ```
 pb.<your-domain>.   A   <VM 외부 IP>   TTL 300
 ```
 
-VM 외부 IP는 `gcloud compute instances describe climb-forge-pb --zone=us-west1-a` 의 `networkInterfaces[].accessConfigs[].natIP`.
+`.env` 예시:
 
-전파 확인:
+```
+DOMAIN=pb.your-domain.com
+ACME_EMAIL=admin@your-domain.com
+```
+
+### 3.B 무료 DDNS (예: DuckDNS)
+
+조건: 도메인 비용 0원. URL이 `<sub>.duckdns.org` 형태라 미관 양보. 단일 사용자 + hostname만 본인이 알면 됨이라 운영상 무해.
+
+1. https://www.duckdns.org 접속 → GitHub/Google/Reddit/Twitter OAuth 로그인.
+2. 빈 칸에 원하는 서브도메인 입력 (예: `climb-forge-pb`) → `add domain`.
+3. 페이지 상단의 **token** 복사 (Slack 토큰 같은 UUID).
+4. **현재 IP 1회 등록** — VM에서 또는 로컬에서:
+
+   ```bash
+   # SUBDOMAIN과 TOKEN을 채워 한 번 호출
+   curl "https://www.duckdns.org/update?domains=<SUBDOMAIN>&token=<TOKEN>&ip=<VM 외부 IP>"
+   # → "OK" 응답이면 성공
+   ```
+
+5. 전파 확인 (대개 1분 내):
+
+   ```bash
+   dig +short <SUBDOMAIN>.duckdns.org
+   # → VM 외부 IP가 보이면 OK
+   ```
+
+§1.4의 **Static IP**를 적용했다면 한 번만 호출하면 끝. Ephemeral IP를 쓰는 경우 VM 부팅 시 동기화가 필요하지만 권장 안 함 (Static이 무료라 안전).
+
+`.env` 예시:
+
+```
+DOMAIN=climb-forge-pb.duckdns.org
+ACME_EMAIL=<본인이 받는 이메일>   # Let's Encrypt 만료 알림용, DuckDNS와 무관
+```
+
+⚠️ DDNS 측에서 일정 기간 IP 업데이트가 없으면 서브도메인을 회수할 수 있음 (DuckDNS 기준 약 30일). Static IP면 변경 없지만 안전을 위해 월 1회 cron으로 위 `curl` 한 번 호출하는 것을 권장:
 
 ```bash
-dig +short pb.<your-domain>
+# crontab -e 에 추가 (VM 시간대 무관)
+0 4 1 * * curl -fsS "https://www.duckdns.org/update?domains=<SUBDOMAIN>&token=<TOKEN>&ip=" >/dev/null
 ```
+
+(IP를 빈 값으로 보내면 DuckDNS가 호출 source IP를 자동 사용.)
 
 ---
 
