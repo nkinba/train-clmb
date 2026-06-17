@@ -21,8 +21,12 @@ import path from "node:path";
 import fs from "node:fs/promises";
 
 const BASE = process.env.CF_BASE_URL ?? "http://localhost:3000";
+const PB_URL = process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090";
 const EMAIL = process.env.CF_TEST_EMAIL;
 const PASSWORD = process.env.CF_TEST_PASSWORD;
+
+// smoke가 생성하는 세션의 target prefix — cleanup이 잔존물도 정리할 수 있도록.
+const SMOKE_TAG = "[smoke-cleanup]";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SHOTS_DIR = path.resolve(__dirname, "..", "screenshots");
@@ -128,12 +132,22 @@ async function runAuth(browser) {
   // 인증 성공 확인 — 홈에 도달했는지.
   const inspect2 = await inspectPage(page, "a02-home");
   await snapshot(page, "a02-home", inspect2);
-  if (!page.url().includes("/login")) {
-    // 좋음
-  } else {
+  if (page.url().includes("/login")) {
     failures.push("a02: still on /login after submit (auth failed?)");
     await page.close();
     return;
+  }
+
+  // PB 토큰 추출. 이후 모든 새 페이지에 localStorage로 주입.
+  const pbAuthRaw = await page.evaluate(() => localStorage.getItem("pocketbase_auth"));
+  const pbToken = (() => {
+    try { return JSON.parse(pbAuthRaw)?.token ?? null; } catch { return null; }
+  })();
+
+  // [smoke-cleanup] 태그 세션 1개 생성 → localStorage activeId 주입 → /sessions/active/* 캡쳐.
+  const createdSessionId = await createSmokeSession(pbToken);
+  if (!createdSessionId) {
+    failures.push("smoke session create failed — /sessions/active/* 캡쳐 skip");
   }
 
   // 인증된 페이지 순회.
@@ -148,31 +162,95 @@ async function runAuth(browser) {
     { label: "a10-strength", path: "/sessions/active/strength/" },
   ];
 
-  for (const r of AUTH_ROUTES) {
-    const p = await browser.newPage();
-    await p.setViewport(VIEWPORT);
-    // 같은 origin이라 cookies가 필요한데 puppeteer는 페이지 간 storage 공유 안 됨.
-    // → localStorage(인증 토큰) 이전: 첫 page에서 토큰 추출 후 새 페이지에 inject.
-    // 단순화: 동일 BrowserContext에서 모든 페이지는 cookies/localStorage origin 공유.
-    // 실제 PB SDK는 localStorage에 토큰 저장 → 같은 origin에서 새 페이지가 공유 X.
-    // 우회: 첫 page의 토큰을 추출해 evaluateOnNewDocument로 미리 주입.
-    await p.evaluateOnNewDocument((token) => {
-      if (token) localStorage.setItem("pocketbase_auth", token);
-    }, await page.evaluate(() => localStorage.getItem("pocketbase_auth")));
+  try {
+    for (const r of AUTH_ROUTES) {
+      const p = await browser.newPage();
+      await p.setViewport(VIEWPORT);
+      // puppeteer 새 페이지에 PB 토큰 + 활성 세션 ID 주입 (LocalAuthStore는 페이지 간 공유 X).
+      await p.evaluateOnNewDocument(({ token, activeId }) => {
+        if (token) localStorage.setItem("pocketbase_auth", token);
+        if (activeId) localStorage.setItem("cf:active-session-id", activeId);
+      }, { token: pbAuthRaw, activeId: createdSessionId ?? "" });
 
-    const inspect = await inspectPage(p, r.label);
-    const resp = await p
-      .goto(BASE + r.path, { waitUntil: "networkidle2", timeout: 15000 })
-      .catch((e) => {
-        failures.push(`${r.label}: goto failed — ${e.message}`);
-        return null;
-      });
-    await new Promise((res) => setTimeout(res, 500));
-    await snapshot(p, r.label, inspect, { httpStatus: resp?.status() ?? null });
-    await p.close();
+      const inspect = await inspectPage(p, r.label);
+      const resp = await p
+        .goto(BASE + r.path, { waitUntil: "networkidle2", timeout: 15000 })
+        .catch((e) => {
+          failures.push(`${r.label}: goto failed — ${e.message}`);
+          return null;
+        });
+      await new Promise((res) => setTimeout(res, 500));
+      await snapshot(p, r.label, inspect, { httpStatus: resp?.status() ?? null });
+      await p.close();
+    }
+  } finally {
+    // cleanup: 이번 세션 + 이전 잔존 smoke 세션 모두 정리. cascade로 자식 row까지 삭제.
+    await cleanupSmokeSessions(pbToken);
   }
 
   await page.close();
+}
+
+// ── PB 헬퍼 ───────────────────────────────────────────────────────────────
+
+async function pbFetch(path, init = {}, token) {
+  const headers = { "Content-Type": "application/json", ...(init.headers ?? {}) };
+  if (token) headers.Authorization = token;
+  const r = await fetch(`${PB_URL}${path}`, { ...init, headers });
+  const text = await r.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  return { status: r.status, ok: r.ok, body };
+}
+
+async function createSmokeSession(token) {
+  if (!token) return null;
+  const payload = {
+    client_id: `smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    date: new Date().toISOString().slice(0, 10),
+    location: "smoke-loc",
+    target: `${SMOKE_TAG} 자동 검증 세션`,
+    shoulder_pain_start: 0,
+    finger_pain_start: 0,
+  };
+  const res = await pbFetch(
+    "/api/collections/sessions/records",
+    { method: "POST", body: JSON.stringify(payload) },
+    token,
+  );
+  if (!res.ok) {
+    logStep({ smokeSessionCreate: "fail", status: res.status, body: res.body });
+    return null;
+  }
+  logStep({ smokeSessionCreate: "ok", id: res.body?.id });
+  return res.body?.id ?? null;
+}
+
+async function cleanupSmokeSessions(token) {
+  if (!token) return;
+  // target prefix로 식별. PB filter 인젝션 회피: tag는 코드 상수라 OK.
+  const filter = `target ~ "${SMOKE_TAG}"`;
+  const list = await pbFetch(
+    `/api/collections/sessions/records?perPage=200&filter=${encodeURIComponent(filter)}`,
+    { method: "GET" },
+    token,
+  );
+  if (!list.ok) {
+    logStep({ cleanup: "list-fail", status: list.status });
+    return;
+  }
+  const items = list.body?.items ?? [];
+  let deleted = 0;
+  for (const it of items) {
+    // cascade delete 설정으로 자식 hangboard/climbing/strength/campus_logs row도 함께 삭제.
+    const d = await pbFetch(
+      `/api/collections/sessions/records/${it.id}`,
+      { method: "DELETE" },
+      token,
+    );
+    if (d.ok) deleted++;
+  }
+  logStep({ cleanup: "ok", matched: items.length, deleted });
 }
 
 // ── main ──────────────────────────────────────────────────────────────────
