@@ -353,7 +353,7 @@ flushQueue 결과에 `succeededCollections: SupportedCollection[]` 포함 → ho
 
 ---
 
-## S19 — 2026-06-17 (commit <pending>)
+## S19 — 2026-06-17 (commit cf8632c)
 
 ### 배경
 S08-S12에서 BottomNav "기록" 탭만 만들고 `/logs` 페이지 본체는 placeholder로 남겨두었음. S15 직후 사용자가 브라우저에서 보면서 발견. S08 history follow-up에 명시했던 항목을 새 Story로 정의 + 즉시 진행.
