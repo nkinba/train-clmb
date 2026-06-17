@@ -400,3 +400,53 @@ PB schema가 sessions → 4개 child collection에 `cascadeDelete: true` 적용 
 - `/logs/detail/?id=<id>` 진입 + child rows 시각 확인 (활성 세션의 row 입력 → 진입 → 표시 확인).
 - 세션 cascade 삭제 후 다른 페이지 갱신 확인.
 - 필터 날짜 경계값 시나리오 (KST 00–9시 세션 포함 여부).
+
+---
+
+## S16 — 2026-06-18 (commit <pending>)
+
+> Phase 4(v1.1)였던 분석 화면을 사용자가 즉시 보고 싶다고 요청 — Phase 2 후미로 당김.
+
+### 변경 파일 요약
+- `web/package.json` — `recharts@3.8.1` devDep 추가.
+- `web/src/lib/analytics.ts` *(신규)* — `useAnalyticsBundle()` (sessions/hangboard/climbing fetchAll 병렬) + 5종 집계 함수 (buildGripMaxKg, buildWeeklyClimb, buildWeeklyHang, buildPainCalendar, buildProjects) + 시간 키 헬퍼 (day/month/ISO week).
+- `web/src/components/analysis/charts.tsx` *(신규)* — 5종 차트 컴포넌트: `GripMaxKgChart` (LineChart), `WeeklyClimbChart` (BarChart), `WeeklyHangChart` (BarChart), `PainCalendar` (30일 그리드, design-tokens 색상), `ProjectList` (프로젝트 진척).
+- `web/src/app/(protected)/analysis/page.tsx` — placeholder → 5개 Card 통합 + 데이터 로딩/에러 분기.
+- `docs/STORIES.md` — S16 → ✅ Done.
+
+### 주요 의사결정·트레이드오프
+
+#### 1. 클라이언트 측 집계
+단일 사용자 + 1년 ~200 세션 + 자식 row 수천 미만 가정. PB getFullList 병렬 fetch 후 useMemo로 집계. 서버 측 집계는 v1.1+ (사용량 늘면).
+
+#### 2. 5개 차트 모두 단순 버전
+PRD §5/§7의 5개 성공 지표 / 차트 항목 1:1 매핑:
+- 그립별 +kg → LineChart (월간, half/open 두 line, connectNulls).
+- 주간 등반 볼륨 → BarChart (attempts).
+- 주간 행보드 시간 → BarChart (total_sec).
+- 통증 캘린더 → 30일 그리드 + PainSelector 색상 토큰 재사용.
+- 프로젝트 진척 → 단순 list (시도/완등 누적).
+
+#### 3. 난이도 가중치 — 별도 추적 노트
+PRD §5는 "난이도 가중치 적용" 명시지만 첫 차트는 attempts만. weighted는 buildWeeklyClimb이 계산은 하지만 UI에 노출 안 함. v1.1에서 toggle.
+
+#### 4. Recharts 도입
+~200KB. 단일 사용자 PWA에 수용 가능. SW 캐시 후 0. 대안(visx, custom SVG) 대비 표준성 + 학습곡선 낮음.
+
+#### 5. ISO week key
+주간 그루핑은 ISO 8601 (월요일 시작, Thursday-based week 계산). UTC 기준.
+
+### 검증
+- `pnpm build` 16/16 static pages.
+- `pnpm smoke` 모든 단계 OK. a04-analysis: h1="분석", 차트 LineChart + BarChart 정상 렌더링 (사용자 본인 실 데이터 표시 — 2026-W25 시도 7회, 2026-06 월간 등).
+- 시각 확인: 카드 5종 + 디자인 토큰 일관 + BottomNav "분석" 탭 active.
+
+### 미해결 follow-up
+- **난이도 가중치 UI 노출** — `WeeklyClimbChart`에 weighted toggle 또는 stacked bar.
+- **PR(최고 기록) 마커** — Recharts ReferenceDot로 각 month/week 최고치 표시.
+- **시간 범위 선택** — 전체 / 3개월 / 12개월 필터.
+- **분석 빈 상태 — 첫 사용자** — 데이터 0건 시 "기록을 시작하세요" CTA.
+- **개별 통증 라인** — 어깨/손가락 따로 라인 표시 (현재는 합산 max).
+
+### 사용자 위임
+- 운영 데이터로 차트 의미 확인 (실 사용 1–2주 후).
