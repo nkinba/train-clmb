@@ -11,7 +11,7 @@
 - 의존 Story가 ✅ 상태인지 확인. 미충족이면 사용자에게 보고 후 중단.
 - `STORIES.md`의 상태를 `🔄 In Progress`로 갱신하고 작업 시작.
 - Task 단위로 코드를 작성한다. 범위 밖 리팩토링·추상화·미래 확장은 추가하지 않는다 (시스템 프롬프트의 YAGNI 원칙 준수).
-- UI 변경이 있으면 dev 서버를 띄우고 **Comet 브라우저의 Claude MCP 서버**로 직접 확인 (위 "브라우저 검증" 절 참조).
+- UI 변경이 있으면 dev 서버를 띄우고 **chrome-devtools MCP**로 직접 확인 (아래 "브라우저 검증" 절 참조).
 
 ### 2. 리뷰 (Self-Review)
 - 별도 subagent(`general-purpose` 또는 `code-reviewer`)를 `Agent` 도구로 띄워 독립 리뷰를 요청한다.
@@ -59,22 +59,40 @@
 
 ## 브라우저 검증
 
-UI/프론트엔드 변경을 검증할 때는 **Comet 브라우저의 Claude MCP 서버를 활용**한다.
+UI/프론트엔드 변경은 두 도구로 검증한다.
 
-- Chrome DevTools / Playwright / Puppeteer 등 별도 도구를 새로 도입하지 말 것 — 사용자가 이미 설치한 Comet 환경을 재사용한다.
-- 검증 흐름:
-  1. 로컬 dev 서버를 띄운다 (`pnpm dev` 등).
-  2. Comet 브라우저에서 해당 URL을 열고, Claude MCP 서버를 통해 페이지 상태/스크린샷/콘솔/네트워크를 점검한다.
-  3. 모바일 뷰포트(예: iPhone 14, 390×844)로 설정해 실제 사용 환경을 재현한다.
-  4. 검증 결과(스크린샷·로그·관찰 사항)를 응답에 요약한다.
-- 검증 대상 (모바일 웹앱 특성상 필수):
-  - PWA: `manifest.json` 로드, Service Worker 등록, 오프라인 동작
-  - Wake Lock: 타이머 화면에서 화면 꺼짐 방지 동작
-  - 터치 타겟 크기 (최소 48×48dp)
-  - 다크 모드 가독성·대비
-  - Vibration / Web Audio / Notification 트리거
+### 주: chrome-devtools MCP (인터랙티브 / Story 단위 검증)
+
+- 사용자 scope으로 등록됨 (`~/.claude.json`). 모든 Claude Code 세션에서 자동 가용.
+- 모바일 뷰포트(iPhone 14, 390×844)로 설정해 실제 사용 환경을 재현.
+- 한 사이클에서 확인할 흐름:
+  1. 로컬 dev 서버 (`cd web && pnpm dev`) + PocketBase 컨테이너가 떠 있는지 확인.
+  2. `mcp__chrome_devtools__navigate` 로 라우트 진입 → 페이지 상태/스크린샷/콘솔/네트워크 점검.
+  3. 인증 필요한 라우트는 `/login`에서 자격증명 입력 → 보호 라우트 진입.
+  4. 검증 결과(스크린샷·로그·관찰 사항)를 응답에 요약.
+
+### 보조: `pnpm smoke` (puppeteer / CI·회귀용)
+
+- `web/scripts/smoke.mjs`. 비인증 4개 + (자격증명 있으면) 인증 흐름 + 활성 세션 1개 생성/cleanup.
+- 자격증명은 `web/.env.local`의 `CF_TEST_EMAIL` / `CF_TEST_PASSWORD` — **PB users 컬렉션의 일반 user**이지 `_superusers`/admin 자격증명이 아님에 주의.
+- 결과: `web/screenshots/*.png` + stdout JSONL.
+- 사용 시점:
+  - chrome-devtools MCP가 일시적으로 작동 불가일 때 대체 검증.
+  - 회귀 확인 (Story 완료 직전 한 번).
+  - "추측으로 통과 처리" 금지 규칙의 대체 증거.
+
+### 검증 대상 (모바일 웹앱 특성상 필수)
+
+- PWA: `manifest.json` 로드, Service Worker 등록, 오프라인 동작.
+- Wake Lock: 타이머 화면에서 화면 꺼짐 방지 동작.
+- 터치 타겟 크기 (최소 48×48dp; CTA는 `h-tap-default` 56dp+ / hero는 `h-tap-hero` 80dp).
+- 다크 모드 가독성·대비.
+- Vibration / Web Audio / Notification 트리거 — headless에선 제한적이라 실 디바이스 검증 필요.
+
+### 원칙
+
 - "타입체크·테스트 통과 = 기능 통과"가 아니다. 실제 브라우저에서 동작을 눈으로 확인하기 전까지 작업 완료라고 보고하지 않는다.
-- Comet MCP 접근이 불가하거나 환경 문제로 검증할 수 없을 경우, 추측으로 통과 처리하지 말고 그 사실을 사용자에게 명시한다.
+- chrome-devtools MCP 도구가 세션에 노출 안 됨(등록 직후 미재시작 등) + smoke도 불가한 경우, **추측으로 통과 처리하지 말고 그 사실을 사용자에게 명시**한다.
 
 ## 디자인 초안
 
