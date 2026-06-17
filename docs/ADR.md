@@ -92,13 +92,23 @@
 
 ## ADR 6: 백업/복구 전략
 
-* **상태:** 확정
-* **컨텍스트:** PocketBase의 SQLite 파일이 e2-micro 디스크에 단일 존재. 인스턴스/디스크 손실 시 모든 훈련 기록 소실.
-* **결정:** PocketBase Hooks(또는 cron 컨테이너)로 매일 1회 SQLite 파일 스냅샷 → **Cloudflare R2** 업로드. 30일 보관 후 자동 삭제.
+* **상태:** 확정 (2026-06-17 결정 변경 — R2 → GCS)
+* **컨텍스트:** PocketBase의 SQLite 파일이 e2-micro 디스크에 단일 존재. 인스턴스/디스크 손실 시 모든 훈련 기록 소실. ADR-2의 "외부 의존 플랫폼 최소화" 원칙도 적용.
+* **결정:** 매일 1회 PocketBase admin API(`POST /api/backups`)로 WAL 일관성 zip 생성 → **Google Cloud Storage**(GCP us-west1) 업로드, **Service Account 인증**(VM metadata service). 30일 보관 후 자동 삭제 (bucket lifecycle 룰).
 * **근거:**
-  * R2는 egress 무료이므로 복구 시 비용 0원.
-  * Free tier 10GB 저장으로 SQLite(수 MB 단위) 백업에 충분.
-  * GCS도 가능하나 egress 과금이 있어 복구 시 비용 부담.
+  * **ADR-2 통합** — 컴퓨트(GCP VM)와 같은 GCP 계정·콘솔. Cloudflare 추가 종속 0.
+  * **GCS Always Free** — 5GB-month standard storage (us-east1/central1/west1). 우리 보관 300MB(10MB × 30일)에 충분.
+  * **Class A/B 한도** — writes 5,000/월 (매일 1회 < 한도), reads 50,000/월. 무관.
+  * **같은 region(us-west1) 내부 트래픽 egress 무료** — VM → GCS 업로드, 복구 시 같은 VM 사용이라면 egress 무료. 외부에서 복구 시 1GB 이하 무료 + 초과 ~$0.12/GB (우리 백업 < 1GB라 사실상 무료).
+  * **Service Account IAM** — VM에 SA 첨부 → metadata service에서 자동 토큰. **access key 환경변수 노출 자체가 사라짐** (보안 ↑). 백업 컨테이너 `docker inspect` 평문 노출 표면 제거.
+* **검토 후 기각된 대안 (2026-06-17):**
+  * **Cloudflare R2** *(직전 ADR-6 결정)* — egress 완전 무료(어디서든)가 핵심 이점이나 (1) 우리 복구 시나리오는 같은 GCP VM 가능성 큼 → GCS도 무료, (2) ADR-2 종속 최소화 위반 (Cloudflare 1개 추가), (3) `R2_ACCESS_KEY_ID`/`SECRET` 평문 환경변수 필수 — SA 인증 같은 무자격증명 옵션 없음. 우리 시나리오에서 egress 무료 이점이 실현되지 않으면 종속/보안 비용만 남음. **→ 재평가 결과 GCS 우세.**
+  * **AWS S3 / Backblaze B2** — 같은 이유로 GCP 외부 SaaS, 종속 추가.
+  * **VM 같은 디스크 내 백업** — 인스턴스/디스크 손실에 대응 불가, ADR-6 컨텍스트 자체 위배.
+* **트레이드오프:**
+  * **외부 region에서 복구 시 egress 과금 가능성** — 1GB 이하 매월 무료라 단일 사용자 < 300MB 시나리오에선 실질 0원. 1년에 1번 복구도 무료.
+  * **GCS Always Free 5GB-month < R2 10GB** — 우리 사용량(300MB)에서 무관. 보관 정책을 30일 → 90일로 늘려도 1GB 안.
+  * **Service Account 권한 관리** — `roles/storage.objectAdmin` on the bucket만. 다른 자원 영향 0.
 
 ## ADR 7: 인터벌 타이머 안정성
 

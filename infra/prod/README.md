@@ -73,7 +73,7 @@ docker compose -f docker-compose.prod.yml up -d --build
   ```
   적용 시점: 도메인 발급 + 첫 admin 로그인 직후 (자기 자신을 막지 않도록 IP 확정 후).
 - **swap 2GB**: e2-micro RAM 1GB라 빌드/마이그레이션 시 OOM 가능. RUNBOOK §2.1 참조.
-- **백업**: 현재는 수동. RUNBOOK §7.1의 PocketBase admin API 방식이 WAL 일관성 안전. **S14**에서 cron + R2 자동화.
+- **백업**: 자동 일일 백업이 `backup` 컨테이너에서 실행. PB admin API → GCS(Service Account 인증, 자격증명 환경변수 노출 0). RUNBOOK §7.3.
 
 ## 변경 영향
 
