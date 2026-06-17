@@ -307,7 +307,7 @@ flushQueue 결과에 `succeededCollections: SupportedCollection[]` 포함 → ho
 
 ---
 
-## Phase 2 follow-up — 2026-06-17 (commit <pending>)
+## Phase 2 follow-up — 2026-06-17 (commit 54991d6)
 
 사용자 피드백 반영. Story 사이클 외 패치.
 
