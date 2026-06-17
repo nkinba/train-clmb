@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Trash2 } from "lucide-react";
 import { NumberStepper } from "@/components/number-stepper";
 import { RpeSelector } from "@/components/rpe-selector";
 import { cn } from "@/lib/utils";
 import {
   STRENGTH_PRESETS,
   useCreateStrengthLog,
+  useDeleteStrengthLog,
   useStrengthLogsForSession,
 } from "@/lib/strength";
 import {
@@ -17,6 +18,7 @@ import {
   RUNG_LABEL,
   useCampusLogsForSession,
   useCreateCampusLog,
+  useDeleteCampusLog,
   type CampusExerciseType,
   type RungSize,
 } from "@/lib/campus";
@@ -131,7 +133,13 @@ export default function StrengthPage() {
 
 function StrengthForm({ sessionId }: { sessionId: string }) {
   const create = useCreateStrengthLog();
+  const del = useDeleteStrengthLog();
   const logsQuery = useStrengthLogsForSession(sessionId);
+
+  const onDelete = (id: string) => {
+    if (!window.confirm("이 기록을 삭제할까요?")) return;
+    del.mutate(id);
+  };
 
   const [exerciseName, setExerciseName] = useState<string>(STRENGTH_PRESETS[0]);
   const [customName, setCustomName] = useState("");
@@ -280,9 +288,9 @@ function StrengthForm({ sessionId }: { sessionId: string }) {
             {logsQuery.data.map((row) => (
               <li
                 key={row.id}
-                className="flex items-center justify-between rounded-md bg-surface px-3 py-2"
+                className="flex items-center gap-2 rounded-md bg-surface px-3 py-2"
               >
-                <span className="text-bodyLg text-fg-primary">
+                <span className="flex-1 text-bodyLg text-fg-primary">
                   {row.exercise_name}
                 </span>
                 <span className="text-caption text-fg-muted tabular-nums">
@@ -291,6 +299,15 @@ function StrengthForm({ sessionId }: { sessionId: string }) {
                     ` · ${row.added_weight_kg > 0 ? "+" : ""}${row.added_weight_kg}kg`}
                   {row.rpe != null && ` · RPE ${row.rpe}`}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => onDelete(row.id)}
+                  disabled={del.isPending}
+                  aria-label={`${row.exercise_name} 기록 삭제`}
+                  className="flex h-tap w-tap items-center justify-center rounded-md text-fg-muted hover:bg-elevated hover:text-status-danger disabled:opacity-50"
+                >
+                  <Trash2 size={18} aria-hidden />
+                </button>
               </li>
             ))}
           </ul>
@@ -302,7 +319,13 @@ function StrengthForm({ sessionId }: { sessionId: string }) {
 
 function CampusForm({ sessionId }: { sessionId: string }) {
   const create = useCreateCampusLog();
+  const del = useDeleteCampusLog();
   const logsQuery = useCampusLogsForSession(sessionId);
+
+  const onDelete = (id: string) => {
+    if (!window.confirm("이 기록을 삭제할까요?")) return;
+    del.mutate(id);
+  };
 
   const [exerciseType, setExerciseType] = useState<CampusExerciseType>("ladder");
   const [rungSize, setRungSize] = useState<RungSize>("medium");
@@ -458,15 +481,24 @@ function CampusForm({ sessionId }: { sessionId: string }) {
             {logsQuery.data.map((row) => (
               <li
                 key={row.id}
-                className="flex items-center justify-between rounded-md bg-surface px-3 py-2"
+                className="flex items-center gap-2 rounded-md bg-surface px-3 py-2"
               >
-                <span className="text-bodyLg text-fg-primary">
+                <span className="flex-1 text-bodyLg text-fg-primary">
                   {CAMPUS_EXERCISE_LABEL[row.exercise_type]}
                 </span>
                 <span className="text-caption text-fg-muted tabular-nums">
                   {RUNG_LABEL[row.rung_size]} · {row.success_sets}/{row.total_sets}
                   {row.movements && ` · ${row.movements}`}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => onDelete(row.id)}
+                  disabled={del.isPending}
+                  aria-label={`${CAMPUS_EXERCISE_LABEL[row.exercise_type]} 기록 삭제`}
+                  className="flex h-tap w-tap items-center justify-center rounded-md text-fg-muted hover:bg-elevated hover:text-status-danger disabled:opacity-50"
+                >
+                  <Trash2 size={18} aria-hidden />
+                </button>
               </li>
             ))}
           </ul>

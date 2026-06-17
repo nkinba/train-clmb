@@ -189,7 +189,7 @@ export default function DevComponentsPage() {
           </button>
         </Section>
       </main>
-      <BottomNav activeId="today" />
+      <BottomNav />
     </>
   );
 }

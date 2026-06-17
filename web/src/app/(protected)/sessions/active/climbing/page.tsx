@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Trash2 } from "lucide-react";
 import { GradePicker } from "@/components/climbing/grade-picker";
 import { RestTimer } from "@/components/climbing/rest-timer";
 import { NumberStepper } from "@/components/number-stepper";
@@ -13,6 +13,7 @@ import {
   gradesFor,
   useClimbingLogsForSession,
   useCreateClimbingLog,
+  useDeleteClimbingLog,
   type ClimbingType,
 } from "@/lib/climbing";
 import { getActiveSessionId } from "@/lib/sessions";
@@ -51,7 +52,13 @@ export default function ClimbingPage() {
   };
 
   const create = useCreateClimbingLog();
+  const del = useDeleteClimbingLog();
   const logsQuery = useClimbingLogsForSession(sessionId);
+
+  const onDelete = (id: string) => {
+    if (!window.confirm("이 기록을 삭제할까요?")) return;
+    del.mutate(id);
+  };
 
   const onSave = () => {
     if (!sessionId) return;
@@ -264,17 +271,26 @@ export default function ClimbingPage() {
             {logsQuery.data.map((row) => (
               <li
                 key={row.id}
-                className="flex items-center justify-between rounded-md bg-surface px-3 py-2"
+                className="flex items-center gap-2 rounded-md bg-surface px-3 py-2"
               >
                 <span className="text-bodyLg text-fg-primary tabular-nums">
                   {row.grade}
                 </span>
-                <span className="text-caption text-fg-muted">
+                <span className="flex-1 text-caption text-fg-muted">
                   {row.type === "Bouldering" ? "볼더링" : "리드"} · 시도{" "}
                   {row.attempts}
                   {row.type === "Bouldering" && row.is_send && " · ✓"}
                   {row.rpe != null && row.rpe > 0 ? ` · RPE ${row.rpe}` : ""}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => onDelete(row.id)}
+                  disabled={del.isPending}
+                  aria-label={`${row.grade} 기록 삭제`}
+                  className="flex h-tap w-tap items-center justify-center rounded-md text-fg-muted hover:bg-elevated hover:text-status-danger disabled:opacity-50"
+                >
+                  <Trash2 size={18} aria-hidden />
+                </button>
               </li>
             ))}
           </ul>

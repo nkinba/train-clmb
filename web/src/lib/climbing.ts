@@ -56,6 +56,19 @@ export function useClimbingLogsForSession(sessionId: string | null) {
   });
 }
 
+export function useDeleteClimbingLog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      // delete는 멱등하지 않아 큐 적용 안 함 (v1.1). 온라인 가정.
+      await pb.collection(Collections.ClimbingLogs).delete(id);
+    },
+    onSuccess: (_void, _id) => {
+      qc.invalidateQueries({ queryKey: climbingKeys.all });
+    },
+  });
+}
+
 export function useCreateClimbingLog() {
   const qc = useQueryClient();
   return useMutation({

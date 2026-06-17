@@ -1,10 +1,8 @@
-import { BottomNav } from "@/components/bottom-nav";
 import { LogoutButton } from "@/components/logout-button";
 
 export default function SettingsPage() {
   return (
-    <>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 pb-[calc(var(--spacing-tab-bar)+2rem)]">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 pb-[calc(var(--spacing-tab-bar)+2rem)]">
         <header>
           <h1 className="text-h1 font-bold text-fg-primary">설정</h1>
           <p className="mt-1 text-caption text-fg-muted">
@@ -21,8 +19,6 @@ export default function SettingsPage() {
             <LogoutButton />
           </div>
         </section>
-      </main>
-      <BottomNav activeId="settings" />
-    </>
+    </main>
   );
 }

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { CalendarDays, ChartLine, ListChecks, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +14,23 @@ const TABS: { id: TabId; label: string; href: string; Icon: typeof CalendarDays 
   { id: "settings", label: "설정", href: "/settings", Icon: SettingsIcon },
 ];
 
-export function BottomNav({ activeId }: { activeId: TabId }) {
+/**
+ * 자동 active 탭 매칭:
+ * - `/logs` 계열 → logs, `/analysis` 계열 → analysis, `/settings` 계열 → settings
+ * - 그 외(`/`, `/sessions/*` 포함) → today (세션은 "오늘" 워크플로우의 일부)
+ */
+function activeIdFor(pathname: string | null): TabId {
+  if (!pathname) return "today";
+  if (pathname.startsWith("/logs")) return "logs";
+  if (pathname.startsWith("/analysis")) return "analysis";
+  if (pathname.startsWith("/settings")) return "settings";
+  return "today";
+}
+
+export function BottomNav() {
+  const pathname = usePathname();
+  const activeId = activeIdFor(pathname);
+
   return (
     <nav
       aria-label="주 탐색"

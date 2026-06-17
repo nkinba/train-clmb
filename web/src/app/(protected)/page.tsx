@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Plus } from "lucide-react";
-import { BottomNav } from "@/components/bottom-nav";
 import { getActiveSessionId, setActiveSessionId, useSession } from "@/lib/sessions";
 
 export default function Home() {
@@ -28,8 +27,7 @@ export default function Home() {
   }, [sessionQuery.error]);
 
   return (
-    <>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 pb-[calc(var(--spacing-tab-bar)+2rem)]">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 pb-[calc(var(--spacing-tab-bar)+2rem)]">
         <header>
           <h1 className="text-h1 font-bold text-fg-primary">오늘</h1>
           <p className="text-caption text-fg-muted">
@@ -80,8 +78,6 @@ export default function Home() {
             </Link>
           </section>
         )}
-      </main>
-      <BottomNav activeId="today" />
-    </>
+    </main>
   );
 }

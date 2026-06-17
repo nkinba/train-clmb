@@ -50,6 +50,19 @@ export function useCampusLogsForSession(sessionId: string | null) {
   });
 }
 
+export function useDeleteCampusLog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      // delete는 멱등하지 않아 큐 적용 안 함 (v1.1). 온라인 가정.
+      await pb.collection(Collections.CampusLogs).delete(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: campusKeys.all });
+    },
+  });
+}
+
 export function useCreateCampusLog() {
   const qc = useQueryClient();
   return useMutation({

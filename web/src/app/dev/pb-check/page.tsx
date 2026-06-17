@@ -253,7 +253,7 @@ export default function PbCheckPage() {
           </ul>
         </section>
       </main>
-      <BottomNav activeId="today" />
+      <BottomNav />
     </>
   );
 }

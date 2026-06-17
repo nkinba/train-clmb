@@ -47,6 +47,19 @@ export function useStrengthLogsForSession(sessionId: string | null) {
   });
 }
 
+export function useDeleteStrengthLog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      // delete는 멱등하지 않아 큐 적용 안 함 (v1.1). 온라인 가정.
+      await pb.collection(Collections.StrengthLogs).delete(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: strengthKeys.all });
+    },
+  });
+}
+
 export function useCreateStrengthLog() {
   const qc = useQueryClient();
   return useMutation({

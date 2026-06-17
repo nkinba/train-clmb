@@ -304,3 +304,49 @@ flushQueue 결과에 `succeededCollections: SupportedCollection[]` 포함 → ho
 6. 다중 row 입력 후 오프라인 → 복구 동기화 → FIFO 순서로 PB에 도착.
 7. (선택) DevTools Application → IndexedDB → `cf-mutation-queue` store에 `queue:v1` 직접 확인.
 8. 검증 결과를 본 history에 ✅ 한 줄 추가.
+
+---
+
+## Phase 2 follow-up — 2026-06-17 (commit <pending>)
+
+사용자 피드백 반영. Story 사이클 외 패치.
+
+### 1. BottomNav 자동 activeId + layout 마운트
+**문제:** 세션 모듈 페이지(`/sessions/new`, `/sessions/active`, `/sessions/active/{hangboard,climbing,strength}`)에 BottomNav가 없어 다른 탭(기록/분석/설정)으로 이동 불가.
+
+**변경:**
+- `web/src/components/bottom-nav.tsx` — `"use client"` + `usePathname()` 기반 자동 `activeId` 매칭. `/logs` → logs, `/analysis` → analysis, `/settings` → settings, 그 외(`/`, `/sessions/*`) → today.
+- `web/src/app/(protected)/layout.tsx` — `<BottomNav />`를 layout에 한 번만 마운트. 모든 보호 라우트에 자동 표시.
+- 각 페이지(`(protected)/page.tsx`, `logs/page.tsx`, `analysis/page.tsx`, `settings/page.tsx`)에서 명시적 `<BottomNav activeId="x" />` 호출 제거.
+- `dev/components/page.tsx`, `dev/pb-check/page.tsx`에서 `<BottomNav />` 인자 제거 (이전 시그니처 호환).
+
+**트레이드오프:**
+- 풀스크린 행보드 타이머는 `fixed inset-0 z-50`라 BottomNav(z-40)를 자동 가림 — 의도 동작.
+- 타이머 동작 중 탭 이동 시 머신 state + Wake Lock 손실. confirm 없이 즉시 navigation — 사용자 요청에 따른 의도. v1.1에서 unsaved 경고 추가 검토.
+
+### 2. climbing/strength/campus 기록 row 삭제
+**문제:** 누적 list에 추가된 row를 잘못 입력해도 삭제할 방법이 없음.
+
+**변경:**
+- `web/src/lib/climbing.ts`, `strength.ts`, `campus.ts` — 각각 `useDeleteXLog` mutation 추가.
+  - PB `pb.collection(X).delete(id)` 직접 호출 (delete는 멱등하지 않아 큐 적용 안 함 — v1.1).
+  - `onSuccess`에서 `qc.invalidateQueries({ queryKey: xKeys.all })`로 list 갱신.
+- `(protected)/sessions/active/{climbing,strength}/page.tsx` — 누적 list row에 인라인 `Trash2` 아이콘 버튼 추가.
+  - `window.confirm("이 기록을 삭제할까요?")`로 확인 후 mutate.
+  - `aria-label`에 row 식별자 포함, `disabled={del.isPending}`.
+  - 휴지통 호버 시 `text-status-danger`로 경고 톤.
+
+**트레이드오프:**
+- `window.confirm`은 native dialog로 모바일에서 잘 작동하지만 styled 아님. shadcn AlertDialog 도입은 over-engineering이라 보수적 선택.
+- delete는 큐 적용 안 함 → 오프라인에서 삭제 시도 시 mutation 에러. UX 측면은 `onError`로 잡지만 사용자에게 toast 없음 — v1.1.
+- 행보드는 누적 list가 없어 (한 세션 = 한 hangboard_logs row) 삭제 UI 없음. logs 페이지(v1.0+) 또는 PB admin UI에서 처리.
+
+### Comet MCP 상태
+사용자 요청대로 `~/.claude/settings.json` + `settings.local.json` 점검. Comet 브라우저 MCP 서버는 두 설정 어디에도 등록되어 있지 않음 (Atlassian/Gmail/Calendar/Drive만 등록). Claude Code (CLI) 환경에서 Comet을 호출하려면 별도 MCP server 등록 필요. follow-up.
+
+### 검증
+빌드 15/15 통과. 사용자 인터랙티브 확인:
+1. dev 서버 재시작 후 보호 라우트 전반에서 BottomNav 표시 확인.
+2. 세션 진입 후 BottomNav로 다른 탭 이동 → 다시 세션으로 복귀 (활성 ID 유지).
+3. 풀스크린 타이머 중에는 BottomNav 가려짐 확인.
+4. climbing/strength/campus에서 row 입력 → 휴지통 → confirm → list 즉시 갱신 + PB row 삭제 확인.
