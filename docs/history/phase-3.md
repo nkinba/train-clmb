@@ -161,7 +161,7 @@ Caddy/compose/backup 컨테이너 모두 hostname-agnostic이라 코드 변경 �
 
 ---
 
-## Phase 3 follow-up — ADR-3 갱신 (대안 검토 + 종속 정합성) — 2026-06-17 (commit <pending>)
+## Phase 3 follow-up — ADR-3 갱신 (대안 검토 + 종속 정합성) — 2026-06-17 (commit 9ce7143)
 
 ### 배경
 
