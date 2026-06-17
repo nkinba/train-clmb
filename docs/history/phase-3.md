@@ -1,6 +1,6 @@
 # Phase 3 — History
 
-## S13 — 2026-06-17 (commit <pending>)
+## S13 — 2026-06-17 (commit 7938f8c)
 
 ### 변경 파일 요약
 - `infra/pocketbase/Dockerfile` — PocketBase 0.22.21 amd64/arm64 SHA256 검증 + 비-root user `pb`(uid 100, gid 101) + `chown -R pb:pb /pb_data /pb_migrations`. wget 추가(healthcheck용).
