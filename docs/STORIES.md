@@ -190,16 +190,21 @@
 - [ ] 백업 객체가 R2에 존재
 - [ ] 복원 절차 `docs/RUNBOOK.md`에 문서화
 
-### S15 — Cloudflare Pages 배포 파이프라인 ⬜
-**Goal:** main 푸시 시 자동 빌드·배포.
-**Dependencies:** S04
+### S15 — VM Caddy 정적 서빙 + 배포 파이프라인 ⬜
+**Goal:** PB와 같은 VM의 Caddy에서 `out/` 정적 서빙, main 푸시 시 자동 빌드·배포 (ADR-3 결정 변경, 2026-06-17).
+**Dependencies:** S04, S13
 **Tasks:**
-- Cloudflare Pages 프로젝트 연결
-- 환경변수 (`NEXT_PUBLIC_PB_URL` 등)
-- 빌드 명령 `pnpm build`, 출력 `out`
+- `infra/prod/Caddyfile`에 `{$APP_DOMAIN}` 두 번째 hostname 블록 추가 (`root /srv/app` + `file_server` + 보안 헤더 + SPA fallback)
+- `infra/prod/docker-compose.prod.yml`에 host 디렉토리(`${DATA_DIR}/app`) → caddy `/srv/app` 마운트, `${APP_DOMAIN:?}` fail-fast
+- `infra/prod/.env.prod.example` + RUNBOOK §3에 두 hostname (PB + 프론트) 등록 절차 (DDNS 시 서브도메인 2개)
+- 빌드: 로컬 `pnpm build` → `web/out/`. VM에 `rsync` 1회 절차 RUNBOOK에 명시
+- 자동화 (GitHub Actions, 옵션): main 푸시 시 `pnpm build` → `rsync -av out/ <vm>:/opt/climb-forge/data/app/` (SSH key는 GitHub secret)
+- PB 측 CORS Allowed Origins에 프론트 hostname 추가
+- `NEXT_PUBLIC_PB_URL`을 빌드 시점 PB hostname으로 빌드
 **Acceptance Criteria:**
-- [ ] 푸시 → 프로덕션 URL에 반영
-- [ ] HTTPS + SW 정상 동작
+- [ ] `https://<APP_DOMAIN>/` 접속 시 다크 모드 홈 화면 + BottomNav 정상 표시
+- [ ] HTTPS (Let's Encrypt) + SW 등록 + manifest 인식 (Lighthouse PWA)
+- [ ] 로컬 push → 배포 절차 완료 + 30초 내 새 콘텐츠 반영
 
 ---
 

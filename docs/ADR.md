@@ -33,23 +33,32 @@
 
 ## ADR 3: 프론트엔드 프레임워크 및 호스팅
 
-* **상태:** 확정 (2026-06-17 대안 검토 + 종속 정합성 명문화)
-* **컨텍스트:** 현업 표준 기술(Next.js, Tailwind CSS)을 사용하여 빠른 UI 컴포넌트 조립이 필요함. 단, e2-micro 서버의 1GB 메모리 환경에서 Node.js SSR 서버를 가동할 경우 OOM(Out of Memory) 발생 위험이 큼. ADR-2의 "외부 의존 플랫폼을 늘리지 않으면서" 원칙도 적용 — 프론트 호스팅이 데이터/코드 lock-in을 만들면 안 됨.
-* **결정:** **Next.js (App Router) Static Export + Cloudflare Pages 배포**
+* **상태:** 확정 (2026-06-17 결정 변경 — CF Pages → GCP VM Caddy)
+* **컨텍스트:** 현업 표준 기술(Next.js, Tailwind CSS)을 사용하여 빠른 UI 컴포넌트 조립이 필요함. 단, e2-micro 서버의 1GB 메모리 환경에서 Node.js SSR 서버를 가동할 경우 OOM(Out of Memory) 발생 위험이 큼. ADR-2의 "외부 의존 플랫폼을 늘리지 않으면서" 원칙 적용 — 프론트 호스팅 채널까지 자체 운영해 모니터링 지점을 한 곳으로 통합.
+* **결정:** **Next.js (App Router) Static Export + GCP VM의 Caddy에서 정적 서빙** (PB와 같은 VM, 다른 hostname 블록).
 * **근거:**
-  * Next.js의 파일 기반 라우팅 및 React 생태계 이점을 그대로 취함.
-  * `output: 'export'` 설정으로 순수 HTML/CSS/JS 정적 파일 빌드 → SSR 서버 리소스 부담 제거 + **호스팅 lock-in 0** (어떤 정적 호스팅으로든 즉시 이전 가능 — 산출물이 `out/` 디렉토리 그 자체).
-  * Cloudflare Pages 무료 hostname `.pages.dev` + 자동 SSL — ADR-2 "도메인 0원" 옵션과 정합 (커스텀 도메인 연결도 선택).
-  * **Cloudflare 생태계 일관성** — ADR-6의 R2 백업과 같은 계정·대시보드에서 관리. 새 SaaS 추가가 아니라 기존 Cloudflare 사용 범위 확장.
-  * 데이터 통신은 PocketBase API와 직접 수행 — Pages는 정적 배포 채널일 뿐, 데이터/인증/세션 모두 PB가 소유. **Pages가 사라져도 같은 산출물을 다른 호스팅에 올리면 끝.**
+  * Next.js 파일 기반 라우팅 + React 생태계 + `output: 'export'`로 순수 HTML/CSS/JS 정적 파일 빌드 → SSR 서버 리소스 부담 제거.
+  * **PB와 같은 VM의 Caddy** — 이미 배포된 Caddy 컨테이너에 hostname 블록 하나만 추가하면 됨. 추가 인프라 0, 새 SaaS 추가 0.
+  * **ADR-2 "인프라 학습" 의도와 일관** — 정적 서빙 + 배포 파이프라인까지 자체 운영 학습.
+  * **운영 모니터링 한 곳으로 통합** — 프론트/PB/백업 로그가 같은 `docker compose logs`에 모임. uptime 모니터도 한 hostname만 보면 됨.
+  * **장애 격리 손실은 단일 사용자라 영향 작음** — PB가 다운되면 프론트가 살아 있어도 데이터 못 받아 어차피 사용 불가. 두 호스팅 분리의 장애 격리 가치가 본 시나리오에선 낮음.
+  * **e2-micro 메모리 부담 무시 가능** — 정적 자산 서빙은 Caddy가 디스크에서 직접 읽음 (~10MB 추가). PB(150MB) + 백업(50MB) + Caddy(20MB) + Node SSR 무 → 충분히 1GB 안에 들어옴.
 * **검토 후 기각된 대안 (2026-06-17):**
-  * **Vercel** — Next.js first-party 지원으로 마찰은 더 적지만 (1) Hobby tier가 "personal/non-commercial only" 라이선스 — 본 앱은 개인용이라 위반 아니나 향후 상황 변화 시 리스크, (2) ADR-6의 R2와 분리된 두 SaaS를 관리해야 함, (3) Next.js static export는 first-party 이점이 거의 없음 (SSR/ISR을 쓸 때만 차이 큼).
-  * **GitHub Pages** — 무료 + lock-in 낮음이지만 PR preview deployment가 없어 S15의 "main 푸시 시 자동 배포" + PR 미리보기 요구와 매끄럽지 못함.
-  * **같은 GCP VM에서 Caddy로 정적 자산 서빙** — 추가 인프라 0이지만 (1) e2-micro 1GB RAM이 PB + Caddy + backup으로 이미 빠듯, (2) 글로벌 edge 캐싱 없음 → 한국 RTT가 us-west1 ~150ms로 노출, (3) `out/` 변경 시 VM 재배포 부담.
+  * **Cloudflare Pages** *(직전 ADR-3 결정)* — 배포 자동화/PR preview/즉시 롤백/글로벌 edge 이점은 분명하나 (1) 단일 사용자 PWA는 Service Worker가 자산 캐시 → edge 이점이 첫 진입에 한정, (2) ADR-2 "외부 종속 최소화"와 "인프라 학습"에 대해 한 곳 더 추가, (3) R2와 같은 계정이라도 대시보드 모니터링은 결국 분리됨. 자동화 부담은 GitHub Actions로 같은 수준 달성 가능. **→ 트레이드오프 재평가 결과 VM 일원화가 우세.**
+  * **Vercel** — Hobby tier "personal/non-commercial only" 라이선스 + R2와 분리된 두 SaaS + static export는 first-party 이점 거의 없음. (CF Pages와 동일 기각 + 라이선스 추가)
+  * **GitHub Pages** — PR preview deployment 부재 + 외부 SaaS 추가.
 * **트레이드오프:**
-  * **CF Pages 의존** — Pages가 무료 정책을 바꿔도 산출물(`out/`)이 plain 정적 파일이라 1시간 안에 다른 곳(Vercel/GH Pages/S3 등)으로 이전 가능. 데이터/인증은 자체 PB에 있어 마이그레이션 비용이 호스팅 이전에 한정.
-  * 한국 RTT는 PB API(GCP us-west1)에서 발생하지 ADR-3 결정 영향이 아님. 정적 자산은 CF edge에서 한국 PoP 도달.
-* **ADR-2와의 일관성:** ADR-2가 "외부 의존 플랫폼을 늘리지 않으면서"라 했지만, Pages는 (1) 이미 R2와 같은 계정이라 새 SaaS 추가가 아니고, (2) 데이터/코드 lock-in이 없으므로 ADR-2 정신과 충돌 없음.
+  * **배포 자동화는 self-managed** — git push 시 자동 배포는 GitHub Actions(빌드 → rsync over SSH) 1회 셋업으로 달성. CF Pages의 "git push만 하면 끝"보다 셋업 비용 있음.
+  * **PR preview 부재** — preview URL이 필요하면 별도 staging hostname(`staging-app.<sub>.duckdns.org`) + 별도 디렉토리 마운트. 단일 사용자 단계에선 over-engineering.
+  * **글로벌 edge 손실** — 한국 첫 진입 시 us-west1 RTT ~150ms 노출. **Service Worker 캐시 적용 후 0ms**. PWA 시나리오에 잘 맞음.
+  * **`out/` 디렉토리 만 옮기면 어디든 이전 가능** — 향후 Pages/Vercel 등으로 갈아탈 비용 1시간 미만.
+* **ADR-2와의 일관성:** ADR-2의 두 원칙 — "외부 의존 플랫폼을 늘리지 않음" + "인프라 학습" — 둘 다와 정합. PB 도메인과 같은 hostname 트리(`app.<sub>.duckdns.org` / `pb.<sub>.duckdns.org`)로 운영.
+
+### 구현 메모 (S15)
+- `infra/prod/Caddyfile`에 두 번째 hostname 블록 추가: `{$APP_DOMAIN}` → `root /srv/app` + `file_server`.
+- `infra/prod/docker-compose.prod.yml`에 host 디렉토리(`${DATA_DIR}/app`) → caddy `/srv/app` 마운트.
+- 배포: 로컬에서 `pnpm build` → `rsync -av web/out/ <vm>:/opt/climb-forge/data/app/`. 자동화는 GitHub Actions로 follow-up.
+- DDNS: DuckDNS에 서브도메인 2개 등록(`pb-...`, `app-...`) 또는 단일 와일드카드 대안 검토.
 
 ## ADR 4: 모바일 전달 방식 (PWA)
 
