@@ -86,3 +86,18 @@
 * 통증 빈도 히트맵 (월간 캘린더 뷰).
 * 프로젝트별 시도/완등 타임라인.
 * PR(최고 기록) 마커 — 차트에 점으로 표시.
+
+## 8. v1.1 후보 — 세션 미디어 (사진/영상 첨부)
+
+* **궁극적 목적과의 연결:** 본인 폼을 영상으로 기록 → 반복 재생하며 분석 / 향후 AI 폼 코칭 입력으로 활용. 단순 기록을 넘는 **훈련 피드백 루프**의 핵심.
+* **데이터 모델 후보:**
+  * `media` 컬렉션: `id`, `client_id`, `session_id`, `kind`(photo/video), `file`(PB file 필드, R2 위임), `notes`, `created`.
+  * 또는 `climbing_logs`/`hangboard_logs`에 `media[]` 다중 파일 필드 직접 추가.
+* **객체 스토리지:** ADR-6 결정대로 Cloudflare R2 (PB native S3 호환). prefix `media/` 또는 별도 버킷으로 백업(`auto/`)과 격리.
+* **UX 고려:**
+  * 세션 종료 후 영상 첨부 시점 (즉시 / 나중에 라이브러리에서 첨부).
+  * 본인만 보는 비공개 가정 (presigned URL or PB auth-gated).
+  * 모바일 카메라 직접 캡처 + 업로드 (PWA file input).
+  * 영상 압축/transcoding은 v1.2+ (현재는 원본 그대로 업로드).
+* **트래픽 추정:** 세션당 사진 5장(~5MB) + 영상 1개(~30MB) = ~35MB 업로드. 폼 분석 반복 재생 시 월 다운로드 1–3GB 예상 (R2 egress 무료라 누적 비용 0).
+* **연관 Story:** STORIES.md S18.

@@ -1,17 +1,16 @@
 #!/bin/bash
-# Climb-Forge 일일 백업 (S14, ADR-6 — GCS).
+# Climb-Forge 일일 백업 (S14, ADR-6 — R2).
 #
 # 흐름:
 #   1) PB admin 토큰 발급 (PB API)
 #   2) PB 측에서 일관 zip 생성 (`POST /api/backups`) — WAL 일관성 보장
-#   3) zip 다운로드 → 무결성 검증 → GCS 업로드 (rclone, Service Account 인증)
+#   3) zip 다운로드 → 무결성 검증 → R2 업로드 (rclone, S3 호환)
 #   4) PB 서버 측 zip 정리 (디스크 절약)
-#   5) GCS 30일 이전 객체 cleanup
+#   5) R2 30일 이전 객체 cleanup
 #
 # 인증:
-#   - VM 운영: VM에 첨부된 Service Account의 metadata token 자동 사용 (key 파일 불필요).
-#   - 로컬 테스트: GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json 또는
-#     RCLONE_CONFIG_GCS_SERVICE_ACCOUNT_FILE=/secrets/sa.json.
+#   R2 access key/secret을 환경변수로 노출 (rclone S3 backend).
+#   bucket-scoped 권한 + 백업/미디어 별 access key 분리 권장 (RUNBOOK §7.3).
 #
 # 단발 실행 — 스케줄링은 entrypoint.sh의 daily loop가 담당.
 
@@ -21,10 +20,12 @@ set -euo pipefail
 : "${PB_INTERNAL_URL:?PB_INTERNAL_URL required}"
 : "${PB_ADMIN_EMAIL:?PB_ADMIN_EMAIL required}"
 : "${PB_ADMIN_PASSWORD:?PB_ADMIN_PASSWORD required}"
-: "${GCS_BUCKET:?GCS_BUCKET required}"
+: "${R2_BUCKET:?R2_BUCKET required}"
+: "${RCLONE_CONFIG_R2_ACCESS_KEY_ID:?R2 access key required (rclone env)}"
 
-# 자동 백업이 GCS에 격리될 sub-prefix. 동일 버킷의 다른 객체와 cleanup 영향 분리.
-GCS_PREFIX="${GCS_PREFIX:-auto}"
+# 자동 백업이 R2에 격리될 sub-prefix.
+# 미디어(v1.1)는 별도 prefix(예: `media/`) 또는 별도 버킷 사용 가정 → cleanup 영향 분리.
+R2_PREFIX="${R2_PREFIX:-auto}"
 
 TS=$(date -u +%Y%m%d-%H%M%S)
 BACKUP_NAME="climb-forge-${TS}.zip"
@@ -45,7 +46,7 @@ notify_failure() {
   fi
 }
 
-log "START backup ${BACKUP_NAME} → gcs://${GCS_BUCKET}/${GCS_PREFIX}/"
+log "START backup ${BACKUP_NAME} → r2://${R2_BUCKET}/${R2_PREFIX}/"
 
 # ── 1) admin 토큰
 log "auth admin"
@@ -87,19 +88,20 @@ fi
 SIZE_BYTES=$(stat -c%s "${TMP_DIR}/${BACKUP_NAME}")
 log "snapshot size: ${SIZE_BYTES} bytes"
 
-# zip 무결성 검증 — 부분 다운로드/finalize 전 race로 깨진 zip이 GCS로 가지 않게.
+# zip 무결성 검증 — 부분 다운로드/finalize 전 race로 깨진 zip이 R2로 가지 않게.
 if ! unzip -t -q "${TMP_DIR}/${BACKUP_NAME}" >/dev/null 2>&1; then
   log "ERROR: zip integrity check failed"
   notify_failure "integrity" "unzip -t failed"
   exit 1
 fi
 
-# ── 4) GCS 업로드 (sub-prefix auto/로 격리 — 다른 객체와 cleanup 영향 분리)
-log "upload to gcs://${GCS_BUCKET}/${GCS_PREFIX}/${BACKUP_NAME}"
-if ! rclone copy "${TMP_DIR}/${BACKUP_NAME}" "gcs:${GCS_BUCKET}/${GCS_PREFIX}/" \
+# ── 4) R2 업로드 (sub-prefix auto/로 격리 — 미디어 객체와 cleanup 영향 분리)
+log "upload to r2://${R2_BUCKET}/${R2_PREFIX}/${BACKUP_NAME}"
+if ! rclone copy "${TMP_DIR}/${BACKUP_NAME}" "r2:${R2_BUCKET}/${R2_PREFIX}/" \
+  --s3-no-check-bucket \
   --stats-one-line; then
-  log "ERROR: GCS upload failed"
-  notify_failure "gcs-upload" "see rclone logs"
+  log "ERROR: R2 upload failed"
+  notify_failure "r2-upload" "see rclone logs"
   exit 1
 fi
 
@@ -114,12 +116,12 @@ PB_BACKUPS_LEFT=$(curl -fsS -H "Authorization: ${TOKEN}" \
   "${PB_INTERNAL_URL}/api/backups" | jq -r '. | length' 2>/dev/null || echo "?")
 log "PB server-side backups remaining: ${PB_BACKUPS_LEFT}"
 
-# ── 6) GCS 30일 이전 cleanup (sub-prefix 안에서만)
-# 30일 보관 정책 (ADR-6). GCS bucket lifecycle 룰이 우선, 이건 이중 안전망.
-log "cleanup GCS ${GCS_PREFIX}/ backups older than 30d"
-rclone delete "gcs:${GCS_BUCKET}/${GCS_PREFIX}/" \
+# ── 6) R2 30일 이전 cleanup (sub-prefix 안에서만)
+# 30일 보관 정책 (ADR-6). R2 bucket lifecycle 룰이 우선, 이건 이중 안전망.
+log "cleanup R2 ${R2_PREFIX}/ backups older than 30d"
+rclone delete "r2:${R2_BUCKET}/${R2_PREFIX}/" \
   --min-age 30d \
   --stats-one-line \
-  --quiet || log "WARN: GCS cleanup failed (non-fatal)"
+  --quiet || log "WARN: R2 cleanup failed (non-fatal)"
 
 log "OK backup completed ${BACKUP_NAME}"

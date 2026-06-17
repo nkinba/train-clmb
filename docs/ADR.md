@@ -90,25 +90,37 @@
   * httpOnly 쿠키 방식은 크로스 도메인 설정 부담이 큼.
 * **트레이드오프:** 추후 사용자 추가 시 XSS 표면 재평가 필요.
 
-## ADR 6: 백업/복구 전략
+## ADR 6: 객체 스토리지 전략 (백업 + 미디어)
 
-* **상태:** 확정 (2026-06-17 결정 변경 — R2 → GCS)
-* **컨텍스트:** PocketBase의 SQLite 파일이 e2-micro 디스크에 단일 존재. 인스턴스/디스크 손실 시 모든 훈련 기록 소실. ADR-2의 "외부 의존 플랫폼 최소화" 원칙도 적용.
-* **결정:** 매일 1회 PocketBase admin API(`POST /api/backups`)로 WAL 일관성 zip 생성 → **Google Cloud Storage**(GCP us-west1) 업로드, **Service Account 인증**(VM metadata service). 30일 보관 후 자동 삭제 (bucket lifecycle 룰).
+* **상태:** 확정 (2026-06-17 결정 재변경 — GCS → R2, 미디어 적극 사용 의도 반영)
+* **컨텍스트:** 두 가지 사용처:
+  1. **PB 백업** — 인스턴스/디스크 손실 대응. 일일 zip 업로드.
+  2. **세션 미디어 (v1.1 후보)** — 폼 코칭/AI 분석용 영상 첨부. 본인 폼을 **반복 재생하며 분석**하는 패턴 → 다운로드 egress가 누적적 변수.
+
+  사용 패턴 차이가 결정 변수를 결정: 백업만이면 egress 거의 0이라 GCS가 보안 우세. **미디어 + 반복 재생이 들어가면 egress가 누적적이라 R2의 egress 무료가 우세.**
+* **결정:** **Cloudflare R2** + S3 호환 인터페이스.
+  * 백업: rclone S3 backend + R2 access key로 일일 zip 업로드.
+  * 미디어: PocketBase 0.22+ file storage native S3 호환 → 같은 R2 버킷(또는 별도) endpoint 지정.
+  * 30일 보관(백업) + 영구 보관(미디어, 사용자 명시적 삭제 시까지).
 * **근거:**
-  * **ADR-2 통합** — 컴퓨트(GCP VM)와 같은 GCP 계정·콘솔. Cloudflare 추가 종속 0.
-  * **GCS Always Free** — 5GB-month standard storage (us-east1/central1/west1). 우리 보관 300MB(10MB × 30일)에 충분.
-  * **Class A/B 한도** — writes 5,000/월 (매일 1회 < 한도), reads 50,000/월. 무관.
-  * **같은 region(us-west1) 내부 트래픽 egress 무료** — VM → GCS 업로드, 복구 시 같은 VM 사용이라면 egress 무료. 외부에서 복구 시 1GB 이하 무료 + 초과 ~$0.12/GB (우리 백업 < 1GB라 사실상 무료).
-  * **Service Account IAM** — VM에 SA 첨부 → metadata service에서 자동 토큰. **access key 환경변수 노출 자체가 사라짐** (보안 ↑). 백업 컨테이너 `docker inspect` 평문 노출 표면 제거.
-* **검토 후 기각된 대안 (2026-06-17):**
-  * **Cloudflare R2** *(직전 ADR-6 결정)* — egress 완전 무료(어디서든)가 핵심 이점이나 (1) 우리 복구 시나리오는 같은 GCP VM 가능성 큼 → GCS도 무료, (2) ADR-2 종속 최소화 위반 (Cloudflare 1개 추가), (3) `R2_ACCESS_KEY_ID`/`SECRET` 평문 환경변수 필수 — SA 인증 같은 무자격증명 옵션 없음. 우리 시나리오에서 egress 무료 이점이 실현되지 않으면 종속/보안 비용만 남음. **→ 재평가 결과 GCS 우세.**
-  * **AWS S3 / Backblaze B2** — 같은 이유로 GCP 외부 SaaS, 종속 추가.
-  * **VM 같은 디스크 내 백업** — 인스턴스/디스크 손실에 대응 불가, ADR-6 컨텍스트 자체 위배.
+  * **PB native S3 호환** — `endpoint=https://<account>.r2.cloudflarestorage.com` + access key 설정만으로 PB file 필드를 R2에 위임. 추가 upload proxy/Worker 불필요.
+  * **R2 egress 완전 무료 (어디서든)** — 한국 사용자가 폼 영상을 반복 재생해도 누적 비용 0. GCS 시 한국 us-west1 egress = 1GB/월 무료 후 ~$0.12/GB, 폼 코칭 적극 사용 시 연 $13-60 누적.
+  * **Free tier 10GB 저장** — 영상 30MB × 100세션 = ~3GB, 1년치 보관에 충분. 초과 시 ~$0.015/GB/월.
+  * **Class A/B 한도** — Class A 1M/월 + Class B 10M/월 무료. 우리 사용량 무관.
+  * **백업 + 미디어 단일 인증 체계** — 같은 R2 access key 한 쌍으로 양쪽 처리. GCS 시 백업은 SA metadata + 미디어는 HMAC keys 혼용 부담.
+* **검토 후 기각된 대안 (2026-06-17 재평가):**
+  * **GCS** *(직전 ADR-6 결정)* — 백업만 가정 시 SA metadata 인증으로 자격증명 노출 0이 강점이었으나 (1) PB file storage가 GCS S3 호환(XML API/HMAC keys)을 native 사용은 가능하지만 백업과 다른 인증 체계 혼용, (2) 한국 사용자의 영상 반복 재생 egress 과금 누적, (3) 폼 분석이 PRD의 궁극적 사용처라면 미디어 트래픽이 백업 대비 압도적으로 큼. **→ 미디어 적극 사용 시나리오에서 R2 우세.**
+  * **AWS S3 / Backblaze B2** — egress 과금(S3) 또는 추가 SaaS(B2). R2의 egress 무료 + 이미 Cloudflare 사용(ADR-3 검토에서는 기각이지만 이 ADR에서는 단일 객체저장소로 사용) 측면에서 부족.
+  * **백업 GCS / 미디어 R2 분리** — 두 곳 관리 부담 + 인증 체계 2종. 단일 사용자 운영 단계에서 over-engineering.
+  * **VM 같은 디스크 내 미디어 저장** — e2-micro 30GB 디스크에 영상 수GB 누적 → SQLite 공간 압박 + 인스턴스 손실 시 미디어도 동시 손실.
 * **트레이드오프:**
-  * **외부 region에서 복구 시 egress 과금 가능성** — 1GB 이하 매월 무료라 단일 사용자 < 300MB 시나리오에선 실질 0원. 1년에 1번 복구도 무료.
-  * **GCS Always Free 5GB-month < R2 10GB** — 우리 사용량(300MB)에서 무관. 보관 정책을 30일 → 90일로 늘려도 1GB 안.
-  * **Service Account 권한 관리** — `roles/storage.objectAdmin` on the bucket만. 다른 자원 영향 0.
+  * **Cloudflare 종속 1개 추가** — ADR-2 "외부 종속 최소화" 원칙 일부 양보. 폼 분석이 본 앱의 궁극적 가치라면 미디어 egress 자유도가 그 양보의 비용을 정당화.
+  * **R2 access key 평문 환경변수** — backup 컨테이너 + PB file storage 양쪽 env에 `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` 노출. SA metadata 대안 없음. 보완: bucket-scoped 권한 + 별도 access key per 컨테이너.
+  * **GCS Always Free 폐기** — 같은 GCP 모니터링 콘솔 통합 손해. 운영 모니터링은 R2/CF console + GCP VM 콘솔 2곳 분산.
+* **재평가 트리거:**
+  * 미디어 기능이 결국 v1.1에서 빠지고 백업만 운영 → GCS 재검토.
+  * R2 free tier 정책 변경 → 비용 추정 재계산.
+  * 미디어 월 다운로드 100GB 초과 → R2 초과분 과금(~$0.015/GB) vs CDN 캐시 도입 검토.
 
 ## ADR 7: 인터벌 타이머 안정성
 

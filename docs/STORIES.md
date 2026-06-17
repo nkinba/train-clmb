@@ -218,6 +218,24 @@
 ### S17 — 음성 메모 입력 ⬜
 **Goal:** Web Speech API로 메모 받아쓰기.
 
+### S18 — 세션 미디어 (사진/영상 첨부) ⬜
+**Goal:** PRD §8의 폼 코칭/AI 분석 후보 — 본인 영상을 세션에 첨부, 반복 재생.
+**Dependencies:** S08 (세션 관리), ADR-6 (R2 객체 스토리지).
+**Tasks:**
+- PB collection `media` 정의 (또는 `climbing_logs.media[]` 다중 파일 필드)
+- PB admin UI에서 **file storage를 R2로 전환** (endpoint/access key/secret/region/forcePathStyle 설정)
+- R2에 별도 access key + prefix `media/` 또는 별도 버킷으로 백업(`auto/`)과 격리
+- 모바일 file input (capture=user) → 업로드 → 진행률 표시
+- 세션 상세 페이지에 첨부 영상/사진 표시 (HTML5 `<video controls>` 또는 lightbox)
+- 라이브러리 뷰 (사용자별 미디어 일람 + 검색)
+**Acceptance Criteria:**
+- [ ] 모바일에서 영상 캡처 → 첨부 → 30초 영상이 < 1분 내 업로드 완료 (4G 환경)
+- [ ] 세션 상세에서 영상 재생 가능 (R2 egress 0)
+- [ ] 다른 사용자(미인증) 접근 차단 (PB rule + presigned URL)
+**Out of scope (v1.2+):**
+- 영상 transcoding / thumbnail 생성
+- AI 폼 분석 모델 연동 (별도 Phase)
+
 ---
 
 ## 의존성 요약

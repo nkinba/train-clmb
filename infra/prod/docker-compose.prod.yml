@@ -70,13 +70,10 @@ services:
     image: climb-forge-backup:s14
     container_name: climb-forge-backup
     restart: unless-stopped
-    # 컨테이너 내부 PB 접근 — internal 네트워크. GCS는 외부라 public도 필요.
+    # 컨테이너 내부 PB 접근 — internal 네트워크. R2는 외부라 public도 필요.
     networks:
       - internal
       - public
-    # 로컬 테스트용 Service Account JSON 마운트 (운영은 VM metadata token 사용 — 마운트 불필요).
-    volumes:
-      - ${GCS_SERVICE_ACCOUNT_HOST_PATH:-/dev/null}:/secrets/sa.json:ro
     depends_on:
       pocketbase:
         condition: service_healthy
@@ -93,15 +90,16 @@ services:
       BACKUP_ON_START: ${BACKUP_ON_START:-0}
       # 실패 시 옵션 webhook 알림 (Slack/Discord/Telegram 등). 비어있으면 silent.
       BACKUP_ALERT_WEBHOOK: ${BACKUP_ALERT_WEBHOOK:-}
-      # GCS — VM에 첨부된 Service Account의 metadata token으로 인증.
-      # 자격증명 환경변수 노출 없음. 로컬 테스트는 RCLONE_CONFIG_GCS_SERVICE_ACCOUNT_FILE 사용.
-      GCS_BUCKET: ${GCS_BUCKET:?GCS_BUCKET required}
-      # 백업 객체가 GCS에 격리될 sub-prefix.
-      GCS_PREFIX: ${GCS_PREFIX:-auto}
-      RCLONE_CONFIG_GCS_TYPE: "google cloud storage"
-      RCLONE_CONFIG_GCS_BUCKET_POLICY_ONLY: "true"
-      # 비어있으면 metadata service에서 자동 토큰. 로컬은 컨테이너 내부 경로 지정.
-      RCLONE_CONFIG_GCS_SERVICE_ACCOUNT_FILE: ${GCS_SERVICE_ACCOUNT_FILE:-}
+      # R2 (Cloudflare) — S3 호환. rclone은 RCLONE_CONFIG_* 환경변수만으로 동작.
+      # 미디어(v1.1)는 별도 access key + 별도 prefix(`media/`) 또는 별도 버킷으로 격리 권장.
+      R2_BUCKET: ${R2_BUCKET:?R2_BUCKET required}
+      R2_PREFIX: ${R2_PREFIX:-auto}
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID required}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY required}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:?R2_ACCOUNT_ID required}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_REGION: auto
 
 networks:
   internal:

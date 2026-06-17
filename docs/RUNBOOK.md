@@ -282,7 +282,7 @@ docker compose -f docker-compose.prod.yml logs -f --tail 100
 
 ```bash
 docker compose -f docker-compose.prod.yml logs --since 7d backup | grep -E 'FAILED|ERROR'
-# 빈 출력이면 OK. 항목이 보이면 해당 timestamp 로그 풀로 확인 + 자격증명/GCS/PB endpoint 점검.
+# 빈 출력이면 OK. 항목이 보이면 해당 timestamp 로그 풀로 확인 + 자격증명/R2/PB endpoint 점검.
 ```
 
 ### 6.2 재시작
@@ -348,13 +348,13 @@ BACKUP_ON_START=1 docker compose -f docker-compose.prod.yml up -d backup
 
 1. PocketBase admin API `POST /api/admins/auth-with-password` 토큰 발급
 2. `POST /api/backups` — PB 서버 측에서 WAL 일관성 보장 zip 생성
-3. zip 다운로드 + 무결성 검증 → **Google Cloud Storage** 업로드 (rclone, Service Account)
+3. zip 다운로드 + 무결성 검증 → **Cloudflare R2** 업로드 (rclone, S3 호환)
 4. PB 서버 측 zip 정리 (디스크 절약)
-5. GCS 30일 이전 객체 cleanup (lifecycle 룰의 이중 안전망)
+5. R2 30일 이전 객체 cleanup (lifecycle 룰의 이중 안전망)
 
-스케줄/대상 변경은 `.env`의 `BACKUP_HOUR_UTC` / `BACKUP_MINUTE_UTC` / `GCS_BUCKET`.
+스케줄/대상 변경은 `.env`의 `BACKUP_HOUR_UTC` / `BACKUP_MINUTE_UTC` / `R2_BUCKET`.
 
-**보안:** VM에 첨부된 Service Account의 metadata token으로 인증 → access key 환경변수 노출 0.
+**미디어 분리:** v1.1에서 PB file storage가 같은 R2를 사용하지만 prefix(`media/`) 또는 별도 access key/버킷으로 권한·cleanup 격리.
 
 ### 7.1 PocketBase admin API (수동, 권장 — WAL 일관성 보장)
 
@@ -400,86 +400,48 @@ sudo chown -R 100:101 data/pb_data    # 비-root user 권한 복원
 docker compose -f docker-compose.prod.yml start pocketbase
 ```
 
-### 7.3 GCS 셋업 (자동 백업 처음 띄울 때 1회)
+### 7.3 R2 셋업 (자동 백업 처음 띄울 때 1회)
 
 #### 7.3.1 버킷 생성
 
-```bash
-gcloud storage buckets create gs://climb-forge-backups \
-  --location=us-west1 \
-  --uniform-bucket-level-access \
-  --default-storage-class=STANDARD
-```
+Cloudflare Dashboard → R2 → **Create bucket**:
+- 이름: `climb-forge-backups` (또는 원하는 값 — `.env`의 `R2_BUCKET`과 일치).
+- 위치: Automatic 또는 가까운 region.
+- 미디어(v1.1)가 같은 버킷에 들어올 예정이면 `climb-forge-storage` 같은 일반 명칭도 OK.
 
-- 이름: `climb-forge-backups` (또는 원하는 값 — `.env`의 `GCS_BUCKET`과 일치).
-- Location: **us-west1** (VM과 같은 region — egress 0).
-- Uniform bucket-level access: ACL 비활성, IAM만 사용 → 권한 추적 단순.
+#### 7.3.2 백업 전용 API 토큰 발급
 
-#### 7.3.2 Service Account 생성 + bucket 권한
+R2 → **Manage API Tokens** → **Create API token**:
+- Permission: **Object Read & Write**
+- Specify bucket: 위에서 만든 단일 버킷만 (다른 버킷 영향 차단).
+- TTL: 만료 없음 (운영) 또는 1년 (보안 강화).
+- Generate → 보이는 **Access Key ID** / **Secret Access Key** / **Account ID**를 1Password 등에 즉시 저장. 한 번만 표시됨.
 
-```bash
-# 1) Service Account 생성
-gcloud iam service-accounts create climb-forge-backup \
-  --display-name="Climb-Forge backup writer"
+> **미디어용 토큰은 별도 발급 권장** (S18 v1.1) — `media/` prefix 한정 권한, PB env에 분리 주입. 백업 토큰이 새도 미디어에 영향 0, 역도 동일.
 
-SA_EMAIL="climb-forge-backup@$(gcloud config get-value project).iam.gserviceaccount.com"
+#### 7.3.3 lifecycle 룰
 
-# 2) 버킷에만 권한 부여 — 다른 자원 영향 0.
-gcloud storage buckets add-iam-policy-binding gs://climb-forge-backups \
-  --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/storage.objectAdmin"
-```
+R2 → 버킷 선택 → **Settings → Object lifecycle rules → Add rule**:
+- Prefix: `auto/` — 백업 컨테이너가 `auto/climb-forge-*.zip`에 격리. 다른 prefix 영향 0.
+- Action: **Delete objects** after **30 days**.
 
-#### 7.3.3 VM에 Service Account 첨부 (운영, key 파일 불필요)
+rclone의 `--min-age 30d` cleanup이 이중 안전망(같은 `auto/` 안에서만 동작). R2 lifecycle 룰이 우선이라 R2 측에 부담 위임.
 
-```bash
-gcloud compute instances stop climb-forge-pb --zone=us-west1-a
-gcloud compute instances set-service-account climb-forge-pb \
-  --zone=us-west1-a \
-  --service-account="${SA_EMAIL}" \
-  --scopes=https://www.googleapis.com/auth/devstorage.read_write
-gcloud compute instances start climb-forge-pb --zone=us-west1-a
-```
+미디어(v1.1)는 별도 prefix(`media/`) — lifecycle 룰 적용 안 함(사용자가 명시적 삭제할 때까지 영구 보관).
 
-이후 백업 컨테이너의 rclone이 VM **metadata service**에서 자동으로 access token을 받음 — JSON key 파일 없음, 환경변수에 자격증명 노출 0.
-
-#### 7.3.4 30일 lifecycle 룰
-
-```bash
-cat > /tmp/lifecycle.json << 'JSON'
-{
-  "rule": [
-    {
-      "action": { "type": "Delete" },
-      "condition": {
-        "age": 30,
-        "matchesPrefix": ["auto/"]
-      }
-    }
-  ]
-}
-JSON
-
-gcloud storage buckets update gs://climb-forge-backups \
-  --lifecycle-file=/tmp/lifecycle.json
-rm /tmp/lifecycle.json
-```
-
-- Prefix `auto/` 한정 — 백업 컨테이너가 `auto/climb-forge-*.zip`에 격리. 다른 객체 영향 0.
-- rclone의 `--min-age 30d` cleanup이 이중 안전망. lifecycle 룰이 우선이라 GCS 측에 부담 위임.
-
-#### 7.3.5 `.env` 설정 + 컨테이너 재시작
+#### 7.3.4 `.env` 설정 + 컨테이너 재시작
 
 ```bash
 cd /opt/climb-forge/infra/prod
-vi .env   # GCS_BUCKET=climb-forge-backups, PB_ADMIN_*는 그대로.
-          # GCS_SERVICE_ACCOUNT_* 두 변수는 비워둠 (metadata token 사용).
+vi .env   # R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+          # PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD 채움.
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build backup
 ```
 
-#### 7.3.6 첫 백업 검증
+#### 7.3.5 첫 백업 검증
 
 ```bash
+# 컨테이너 시작 + 즉시 1회 실행 (BACKUP_ON_START=1):
 BACKUP_ON_START=1 docker compose -f docker-compose.prod.yml --env-file .env up -d --build backup
 docker compose -f docker-compose.prod.yml logs --tail 50 backup
 ```
@@ -487,22 +449,18 @@ docker compose -f docker-compose.prod.yml logs --tail 50 backup
 성공 로그 예시:
 
 ```
-[...Z] START backup climb-forge-20260617-110000.zip → gcs://climb-forge-backups/auto/
+[...Z] START backup climb-forge-20260617-110000.zip → r2://climb-forge-backups/auto/
 [...Z] auth admin
 [...Z] create snapshot ...
 [...Z] download ...
 [...Z] snapshot size: 24576 bytes
-[...Z] upload to gcs://climb-forge-backups/auto/climb-forge-...zip
+[...Z] upload to r2://climb-forge-backups/auto/climb-forge-...zip
 [...Z] cleanup PB server-side snapshot
-[...Z] cleanup GCS auto/ backups older than 30d
+[...Z] cleanup R2 auto/ backups older than 30d
 [...Z] OK backup completed ...
 ```
 
-GCS 객체 확인:
-
-```bash
-gcloud storage ls gs://climb-forge-backups/auto/
-```
+R2 console에서 객체 존재 확인.
 
 이후 `BACKUP_ON_START=0`(또는 미설정)로 되돌리고 재시작:
 
@@ -511,38 +469,23 @@ unset BACKUP_ON_START
 docker compose -f docker-compose.prod.yml --env-file .env up -d backup
 ```
 
-#### 7.3.7 로컬 테스트 (선택)
-
-VM 외에서 백업 컨테이너를 띄워볼 때:
-
-```bash
-# 1) SA key file 발급 (운영 VM에서는 사용 안 함)
-gcloud iam service-accounts keys create /path/to/sa.json \
-  --iam-account="${SA_EMAIL}"
-
-# 2) .env에 두 줄 추가
-# GCS_SERVICE_ACCOUNT_HOST_PATH=/path/to/sa.json
-# GCS_SERVICE_ACCOUNT_FILE=/secrets/sa.json
-
-# 3) 실행
-BACKUP_ON_START=1 docker compose -f docker-compose.prod.yml --env-file .env up backup
-```
-
-⚠️ JSON key는 절대 git에 들어가면 안 됨. 사용 후 즉시 `gcloud iam service-accounts keys delete` 또는 안전한 secret store에 보관.
-
 ### 7.4 복원 리허설 (1회 권장, S14 acceptance)
 
 복원 절차의 신뢰성은 **실제로 한 번 해본 다음**에만 보장됨. **별도 staging VM(또는 로컬 macOS Docker)**에서 다음을 1회 수행하고 결과를 `docs/history/phase-3.md`에 기록:
 
-#### 7.4.1 GCS에서 백업 zip 다운로드
-
-같은 GCP region 안: `gcloud storage cp` 한 줄 (인증은 `gcloud auth login` 또는 SA).
+#### 7.4.1 R2에서 백업 zip 다운로드
 
 ```bash
-gcloud storage cp gs://climb-forge-backups/auto/<백업파일명> ./
+docker run --rm \
+  -e RCLONE_CONFIG_R2_TYPE=s3 \
+  -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+  -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
+  -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+  -e RCLONE_CONFIG_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+  -e RCLONE_CONFIG_R2_REGION=auto \
+  -v "$PWD:/data" \
+  rclone/rclone:latest copy r2:climb-forge-backups/auto/<백업파일명> /data/
 ```
-
-외부에서: SA key 또는 `gcloud auth application-default login` 후 동일 명령.
 
 #### 7.4.2 PB 인스턴스에 복원
 
