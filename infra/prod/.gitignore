@@ -1,0 +1,5 @@
+# 실 환경변수 (DOMAIN/ACME_EMAIL 포함)
+.env
+
+# 운영 데이터/SSL 인증서 — 컨테이너 마운트 위치
+/data/

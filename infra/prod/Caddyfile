@@ -1,0 +1,43 @@
+# Climb-Forge Caddy reverse proxy (S13).
+#
+# 자동 SSL (Let's Encrypt) + HTTP/2/3 + gzip + 보안 헤더.
+# {$DOMAIN} / {$ACME_EMAIL}은 docker-compose가 환경변수로 주입.
+{
+	# 전역 옵션
+	email {$ACME_EMAIL}
+	# Cloudflare/HTTPS-only로 강제. Let's Encrypt의 TLS-ALPN/HTTP-01 challenge로 자동 발급.
+	# admin endpoint는 외부 노출 안 함.
+	admin off
+}
+
+{$DOMAIN} {
+	# PocketBase로 reverse proxy. internal 네트워크의 서비스명으로 직접 호출.
+	# X-Forwarded-For/Proto/Host는 Caddy 기본 전달. 추가 명시 안 함 (불필요/오용 방지).
+	# 향후 Cloudflare 등 추가 프록시 layer 도입 시 `servers { trusted_proxies static ... }` 검토.
+	reverse_proxy pocketbase:8090
+
+	# 보안 헤더 (모바일 PWA + admin UI 호환).
+	header {
+		# HSTS — 1년, 서브도메인 포함, preload 가능.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# clickjacking 회피.
+		X-Frame-Options "DENY"
+		# MIME sniffing 회피.
+		X-Content-Type-Options "nosniff"
+		# Referrer 최소 노출.
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy가 자동 추가하는 Server: 제거.
+		-Server
+	}
+
+	# 압축 — JSON 응답 크기 절감.
+	encode gzip zstd
+
+	# 액세스 로그 — stdout(docker logs). 운영 grep/jq 위해 JSON.
+	# 인증서 발급/에러는 Caddy 런타임 stderr로 따로 나옴 — alert는 거기 기준.
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}

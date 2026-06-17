@@ -1,0 +1,71 @@
+# Climb-Forge 운영 환경 (ADR-6, ADR-8 / S13)
+#
+# 구성:
+#   pocketbase: ../pocketbase/Dockerfile로 빌드. internal 네트워크만 노출.
+#   caddy:      80/443 호스트 바인딩. 자동 SSL(Let's Encrypt). PB로 reverse proxy.
+#
+# 실행 (VM에서):
+#   cd /opt/climb-forge/infra/prod
+#   cp .env.prod.example .env && vi .env       # DOMAIN, ACME_EMAIL 채움
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#
+# 검증:
+#   docker compose ps           # 두 컨테이너 healthy 확인
+#   curl https://$DOMAIN/api/health
+#   브라우저 https://$DOMAIN/_/  → admin UI
+
+services:
+  pocketbase:
+    build:
+      context: ../pocketbase
+      args:
+        PB_VERSION: 0.22.21
+    image: climb-forge-pocketbase:0.22.21
+    container_name: climb-forge-pb
+    restart: unless-stopped
+    # host 8090 노출 안 함 — Caddy를 통해서만 외부 접근.
+    expose:
+      - "8090"
+    volumes:
+      - ${DATA_DIR:-./data}/pb_data:/pb_data
+      - ../pocketbase/pb_migrations:/pb_migrations:ro
+    healthcheck:
+      # 첫 부팅 시 마이그레이션이 무거울 수 있어 start_period 넉넉히.
+      # Caddy depends_on가 service_healthy 대기 → 첫 부팅 시 ACME challenge 윈도우 보존.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8090/api/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: climb-forge-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DATA_DIR:-./data}/caddy_data:/data         # ACME 인증서 (영속)
+      - ${DATA_DIR:-./data}/caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:?DOMAIN env required (e.g. pb.example.com)}
+      - ACME_EMAIL=${ACME_EMAIL:?ACME_EMAIL env required (Let's Encrypt 알림용)}
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    networks:
+      - internal
+      - public
+
+networks:
+  internal:
+    # Caddy ↔ PocketBase. 외부 접근 차단.
+    driver: bridge
+  public:
+    # Caddy ↔ 외부. host 80/443.
+    driver: bridge

@@ -68,14 +68,16 @@ tar czf backup-$(date +%Y%m%d).tar.gz pb_data
 docker compose start
 ```
 
-## 프로덕션 (S13 영역)
+## 프로덕션
 
-현재 compose는 로컬용. 운영은 S13에서 다음 추가:
-- **Caddy reverse proxy + autotls** — HTTPS, ADR-2.
-- **CORS 화이트리스트** — ADR-5. PocketBase 기본은 `*` 허용. admin UI > Settings > Application > "Allowed origins"에 프론트 도메인(`*.pages.dev` 또는 커스텀)만 추가.
-- **컨테이너 비-root 사용자** — Dockerfile에 `USER` 추가. Linux 호스트에서 `pb_data` 권한 오염 방지.
-- **PocketBase 바이너리 SHA256 검증** — Dockerfile download 단계에 checksum 비교 추가.
-- **자동 백업** — S14에서 cron + R2.
+운영 환경은 `infra/prod/`. 다음 항목은 **S13에서 모두 적용됨**:
+- ✅ **Caddy reverse proxy + autotls** — `infra/prod/Caddyfile` 자동 Let's Encrypt + HSTS/X-Frame-Options 등 보안 헤더.
+- ✅ **컨테이너 비-root 사용자** — 본 Dockerfile에 `USER pb` (uid 100, gid 101). 로컬·prod 동일.
+- ✅ **PocketBase 바이너리 SHA256 검증** — 본 Dockerfile의 download 단계.
+- 🔜 **CORS 화이트리스트** — PB admin UI에서 첫 부팅 후 수동 설정. RUNBOOK §4.3 참조.
+- 🔜 **자동 백업** — **S14**에서 cron + R2.
+
+처음 띄우는 단계는 `docs/RUNBOOK.md` 참조.
 
 ## 주요 결정
 

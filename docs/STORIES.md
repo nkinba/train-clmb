@@ -166,7 +166,7 @@
 
 ## Phase 3 — 배포
 
-### S13 — 서버 인프라 (Compute + Docker Compose + Caddy) ⬜
+### S13 — 서버 인프라 (Compute + Docker Compose + Caddy) ✅
 **Goal:** ADR-6 결정한 region에 PocketBase 운영 환경 구축.
 **Dependencies:** S02, S06
 **Tasks:**
