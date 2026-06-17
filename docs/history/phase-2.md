@@ -450,3 +450,37 @@ PRD §5는 "난이도 가중치 적용" 명시지만 첫 차트는 attempts만. 
 
 ### 사용자 위임
 - 운영 데이터로 차트 의미 확인 (실 사용 1–2주 후).
+
+---
+
+## S20 — 2026-06-17 (commit 3901342)
+
+### 변경 파일
+- `web/src/lib/picker-presets.ts` (신규) — `LOCATION_PRESETS` 22개 (서울/수도권·지방/야외/홈), `TARGET_PRESETS` 23개 (그레이드/컨디션/기술/캐주얼) + 카테고리 라벨 맵.
+- `web/src/lib/mru.ts` (신규) — localStorage MRU 6개. `getMru` / `pushMru`. SSR + JSON 파싱 + QuotaExceeded safe.
+- `web/src/components/picker.tsx` (신규) — 공용 `PickerCore<C>` + `LocationPicker` / `TargetPicker` wrapper. 카테고리별 chip grid + 검색 + MRU 섹션 + "직접 입력" 토글.
+- `web/src/app/(protected)/sessions/new/page.tsx` — `<input>` 2개 → 두 picker. `onSuccess`에 `pushMru` x2.
+- `docs/STORIES.md` — S20 ✅, S21 placeholder.
+- `docs/review/phase-2.md` — S20 self-review.
+
+### 주요 의사결정 / 트레이드오프
+1. **prebuilt vs 지도 SDK 우선순위.** v1.0은 prebuilt 22개로 시작 → MRU로 점진 보완. 지도 SDK (S21)는 v1.1로 분리 — API key 발급/한도 관리 비용 회피.
+2. **MRU localStorage vs PB record 필드.** Picker 가속용 캐시는 PB까지 갈 필요 없음 → localStorage. PB record 자체의 `location`/`target` 필드는 기존대로 자유 문자열 유지 (chip 클릭이든 직접 입력이든 동일 형태).
+3. **검색 중 MRU 숨김.** `!query` 조건으로 MRU 섹션을 비검색 모드에서만 노출. 검색은 prebuilt 전부 대상 — MRU는 별도 진입점.
+4. **PickerCore 제네릭.** `C extends string` 으로 Location/Target 카테고리 union을 wrapper에서 hide. iconFor/categoryLabel은 `Record<C, ...>` 로 type-safe indexing.
+5. **아이콘 위치.** Self-review에서 presets로 옮기는 제안 → 반박. presets는 데이터 layer, lucide-react는 presentation 의존 → lib까지 끌어들이지 않음.
+
+### 검증
+- `pnpm build` 16/16 static pages.
+- `pnpm smoke` 모든 단계 OK.
+- 인터랙티브 검증 (puppeteer ad-hoc): 장소 chip 클릭 → state 반영, 검색 "홍대" → 1개 필터, 세션 생성 후 다시 진입 시 MRU `["더 클라임 강남"]` / `["V6 프로젝트"]` 로컬스토리지 저장 확인, "최근 사용" 섹션 상단 노출 확인.
+- 스크린샷: `web/screenshots/a06-sessions-new.png` (선택 전 prebuilt 그리드 — 서울 짐 그룹 표시).
+
+### 다음 Story에 영향
+- 지도 SDK 통합 (S21) — `LocationPicker` 직접 입력 모드를 검색 드롭다운 + lat/lng 메타로 확장. record schema 마이그레이션 필요 시 별도 Story.
+- PB record의 `location`/`target` 필드는 prebuilt 라벨 그대로 들어감 — 분석 페이지의 `target` 기반 집계 (가령 "V6 프로젝트 ×n주") 가능.
+
+### 미해결 follow-up
+- chip 키보드 네비게이션 (arrow/Home/End) — 현재 마우스·터치 only. PainSelector 패턴 참조.
+- 검색 시 MRU 매칭 항목도 위에 노출하는 hybrid 모드 — UX 가설.
+- prebuilt 리스트 확장 (지방 짐 더 보강) — 사용자 피드백 받아 점진 추가.
