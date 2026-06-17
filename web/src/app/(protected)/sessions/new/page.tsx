@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { PainSelector } from "@/components/pain-selector";
+import { LocationPicker, TargetPicker } from "@/components/picker";
+import { pushMru } from "@/lib/mru";
 import { useCreateSession, type PainLevel } from "@/lib/sessions";
 
 function todayISODate() {
@@ -29,16 +31,20 @@ export default function NewSessionPage() {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanLocation = location.trim();
+    const cleanTarget = target.trim();
     createSession.mutate(
       {
         date,
-        location: location.trim(),
-        target: target.trim(),
+        location: cleanLocation,
+        target: cleanTarget,
         shoulder_pain_start: shoulderPain,
         finger_pain_start: fingerPain,
       },
       {
         onSuccess: () => {
+          pushMru("cf:mru-locations", cleanLocation);
+          pushMru("cf:mru-targets", cleanTarget);
           router.replace("/sessions/active/");
         },
       },
@@ -80,33 +86,9 @@ export default function NewSessionPage() {
           />
         </label>
 
-        <label className="block">
-          <span className="text-caption text-fg-secondary">장소</span>
-          <input
-            type="text"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="예) 더 클라임 강남"
-            maxLength={120}
-            autoComplete="off"
-            inputMode="text"
-            className="mt-1 h-tap-default w-full rounded-md bg-surface px-3 text-fg-primary outline-none placeholder:text-fg-muted"
-          />
-        </label>
+        <LocationPicker value={location} onChange={setLocation} />
 
-        <label className="block">
-          <span className="text-caption text-fg-secondary">메인 타깃</span>
-          <input
-            type="text"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            placeholder="예) V6 프로젝트 + 하프 크림프"
-            maxLength={200}
-            autoComplete="off"
-            inputMode="text"
-            className="mt-1 h-tap-default w-full rounded-md bg-surface px-3 text-fg-primary outline-none placeholder:text-fg-muted"
-          />
-        </label>
+        <TargetPicker value={target} onChange={setTarget} />
 
         <PainSelector
           partLabel="어깨"

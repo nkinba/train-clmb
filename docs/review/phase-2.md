@@ -299,3 +299,37 @@
 | 🟢 **N7 "더 보기" 누적** | **수용** | `accumulated` state로 누적 표시 + id 중복 제거 + 삭제 후 즉시 제거. |
 | 🟢 N8 formatDate 중복 | **반박** | YAGNI. |
 | 🟢 N9 "진행 중" 텍스트 통일 | **수용** | "진행 중"으로. |
+
+---
+
+## S20 — 2026-06-17
+
+### Subagent (general-purpose) 원문 요약
+
+리뷰 결과 — Acceptance Criteria 5개 중 4개 ✅, 1개 ⚠️.
+
+| 항목 | 결과 |
+|---|---|
+| 폼 진입 시 prebuilt + 아이콘 | ✅ `PickerCore` mount `mode="preset"` + 카테고리 헤더 아이콘 |
+| 검색 즉시 필터 | ✅ `filteredPresets` reactive |
+| "직접 입력" 토글 → text input | ✅ Mode 상태 + autoFocus |
+| MRU 누적 노출 | ✅ `pushMru` 후 mount당 1회 `getMru` |
+| 48dp+ 터치 타겟 | ⚠️ 토글 버튼만 미달 |
+
+#### Valid issues
+1. `picker.tsx:94-112` "직접 입력" 토글 버튼 `py-1 text-micro` → 약 30px. **48dp 미달**.
+2. `picker.tsx:248,269` `as LocationPreset[]` / `as TargetPreset[]` cast 불필요 — no-op.
+
+#### Nits / 검토 사항
+3. `LOCATION_ICON` / `TARGET_ICON`을 `lib/picker-presets.ts`로 옮겨 SSoT — suggestion.
+4. `MAX_ITEMS = 6` 매직 넘버, prebuilt 22+23개 번들 영향 미미, lucide named import tree-shake OK.
+5. SSR guard (`typeof window === "undefined"`) + JSON.parse 안전 fallback + QuotaExceeded catch + trim 통과 모두 ✅.
+
+### 본인 판단
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| 🔴 1 토글 버튼 48dp | **수용** | Acceptance Criteria 직접 위반. `min-h-tap` + `px-3`. |
+| 🟢 2 `as` cast 제거 | **수용** | 시그널 명확. 타입 추론으로 충분. |
+| 🟡 3 아이콘 lib로 이동 | **반박** | 아이콘은 presentation layer. presets는 데이터. lib에 lucide-react 의존이 끌려오는 게 worse trade-off. |
+| 🟢 4-5 nits | 정보 | 변경 없음. |

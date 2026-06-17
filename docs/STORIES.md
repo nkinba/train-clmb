@@ -154,6 +154,31 @@
 ### S12 — 오프라인 입력 큐 ✅
 
 ### S19 — 과거 세션 조회/관리 (`/logs`) ✅
+
+### S20 — 장소/타깃 Picker UX ✅
+**Goal:** 새 세션 폼의 "장소" / "메인 타깃" 텍스트 입력을 prebuilt 리스트 + MRU + 직접 입력 picker로 교체.
+**Dependencies:** S08 ✅
+**Tasks:**
+- `lib/picker-presets.ts`: 한국 클라이밍 짐 prebuilt + 야외 암장 + 타깃(그레이드/컨디션/기술/캐주얼) 카테고리.
+- `lib/mru.ts`: localStorage MRU 6개 누적 (key: locations / targets), push/get/SSR 안전.
+- `components/picker.tsx`: 공통 Picker (검색 + MRU + presets grid + 직접 입력 모드 토글).
+- `/sessions/new`: 기존 input 2개 → `LocationPicker` / `TargetPicker`. 세션 생성 성공 시 MRU push.
+**Acceptance Criteria:**
+- [x] 폼 진입 시 prebuilt 리스트 + 아이콘 표시
+- [x] 검색 input으로 prebuilt 즉시 필터
+- [x] "직접 입력" 토글 → 일반 text input
+- [x] 세션 생성 후 입력값이 MRU에 누적되어 다음 진입 시 상단에 표시
+- [x] 모바일 한 손 조작 + 48dp+ 터치 타겟
+
+### S21 — 지도 SDK 연동 (장소 픽) ⬜ (v1.1 후보)
+**Goal:** S20의 직접 입력 단계를 카카오맵/네이버 places로 보강 — 검색 결과에서 장소 picking.
+**Dependencies:** S20
+**Tasks:**
+- 카카오맵 vs 네이버 Places 비교 (한국 클라이밍 짐 데이터 정확성·API 한도·비용).
+- API key 발급 + 환경변수 분리 (NEXT_PUBLIC_KAKAO_KEY 등).
+- 장소 검색 dropdown → 선택 시 location.name(+ 위경도 메타) 저장.
+- (선택) 세션 record에 lat/lng 필드 추가 마이그레이션.
+**Out of scope (현 단계):** 지도 시각화, 거리 기반 추천.
 **Goal:** S08-S12에서 누락된 종료 세션 조회·삭제 흐름. BottomNav "기록" 탭이 살아남.
 **Dependencies:** S08, S09, S10, S11 (모두 ✅)
 **Tasks:**
