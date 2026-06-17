@@ -350,3 +350,53 @@ flushQueue 결과에 `succeededCollections: SupportedCollection[]` 포함 → ho
 2. 세션 진입 후 BottomNav로 다른 탭 이동 → 다시 세션으로 복귀 (활성 ID 유지).
 3. 풀스크린 타이머 중에는 BottomNav 가려짐 확인.
 4. climbing/strength/campus에서 row 입력 → 휴지통 → confirm → list 즉시 갱신 + PB row 삭제 확인.
+
+---
+
+## S19 — 2026-06-17 (commit <pending>)
+
+### 배경
+S08-S12에서 BottomNav "기록" 탭만 만들고 `/logs` 페이지 본체는 placeholder로 남겨두었음. S15 직후 사용자가 브라우저에서 보면서 발견. S08 history follow-up에 명시했던 항목을 새 Story로 정의 + 즉시 진행.
+
+### 변경 파일 요약
+- `web/src/lib/sessions.ts` — `SessionListFilter` 타입 + `useSessionList(filter)` (PB filter 파라미터 바인딩 + KST `+09:00` offset) + `useDeleteSession` (sessions + 4개 child collection list invalidate + 활성 세션 cleanup).
+- `web/src/lib/hangboard.ts` — `useHangboardLogsForSession` + `useDeleteHangboardLog` 추가 (다른 모듈에는 이미 있음).
+- `web/src/app/(protected)/logs/page.tsx` *(신규 본체)* — 필터(날짜 범위/장소/타깃) + 페이지네이션("더 보기", 누적 표시) + 세션 list row(메타 + 진행 중 배지 + 휴지통) + 빈 상태 분기(필터 활성 vs 전체).
+- `web/src/app/(protected)/logs/detail/page.tsx` *(신규)* — Suspense + useSearchParams로 id 추출 + 세션 메타 + child rows 4종 그루핑(hangboard/climbing/strength/campus) + 개별 row 휴지통 + 세션 cascade 삭제 버튼.
+- `docs/STORIES.md` — S19 신규 + ✅ Done.
+- `docs/review/phase-2.md` — S19 self-review append.
+
+### 주요 의사결정·트레이드오프
+
+#### 1. 활성 세션도 같은 list에 표시
+별도 섹션 분리 vs 같은 list에 "진행 중" 배지. 단일 사용자 + 최대 1개 활성이라 같은 list 최상단(date desc)에 배지로 구분이 직관.
+
+#### 2. Static export 호환 — `/logs/detail?id=<id>`
+`/logs/[id]` dynamic route는 build-time params 필요 → query parameter 패턴. `useSearchParams()`는 Next 16 + static export에서 Suspense boundary 필수.
+
+#### 3. 필터 — draft/query state 분리
+debounce 도입 회피. 사용자가 "검색" 버튼 명시적 누름 → query 갱신. 모바일 키보드 + 한 손 조작에 자연.
+
+#### 4. 페이지네이션 — 누적 표시
+"더 보기"가 직관적이려면 items 누적이어야 함 (페이지 단위 교체는 라벨/UX 부조화). `accumulated` state + id 중복 제거 + 삭제 시 즉시 제거.
+
+#### 5. KST 경계 처리
+PB `date` 필드는 UTC datetime. 사용자는 KST yyyy-mm-dd 입력. `${dateFrom} 00:00:00.000+09:00` / `${dateTo} 23:59:59.999+09:00`로 PB filter에 명시적 offset → KST 00–9시 세션 누락 없음.
+
+#### 6. cascade-delete 활용
+PB schema가 sessions → 4개 child collection에 `cascadeDelete: true` 적용 (S06). 세션 삭제 시 PB가 자동으로 child rows 정리 → 클라이언트는 sessions delete 1회만 호출.
+
+### 검증
+- `pnpm build` 16/16 static pages (이전 15 + `/logs/detail`).
+- `pnpm smoke` 모든 단계 OK. a03-logs h1="기록" 200.
+- 시각 확인 (활성 세션 + 본인 운영 세션이 있는 상태):
+  - 필터 UI 4개 정상 표시.
+  - "진행 중" 배지가 활성 세션 옆에.
+  - 사용자 본인 세션 (더클 사당/서볼 선유 등) list에 표시.
+  - 휴지통 아이콘 행 끝에 정렬.
+  - BottomNav "기록" 탭 brand 색 active.
+
+### 사용자 위임
+- `/logs/detail/?id=<id>` 진입 + child rows 시각 확인 (활성 세션의 row 입력 → 진입 → 표시 확인).
+- 세션 cascade 삭제 후 다른 페이지 갱신 확인.
+- 필터 날짜 경계값 시나리오 (KST 00–9시 세션 포함 여부).

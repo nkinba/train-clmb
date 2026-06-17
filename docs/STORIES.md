@@ -152,6 +152,23 @@
 - [ ] DB row 정상 저장
 
 ### S12 — 오프라인 입력 큐 ✅
+
+### S19 — 과거 세션 조회/관리 (`/logs`) ✅
+**Goal:** S08-S12에서 누락된 종료 세션 조회·삭제 흐름. BottomNav "기록" 탭이 살아남.
+**Dependencies:** S08, S09, S10, S11 (모두 ✅)
+**Tasks:**
+- `/logs` 페이지: 세션 list (최신순) + 필터(날짜 범위·장소·타깃) + 페이지네이션("더 보기")
+- list row: 날짜·장소·타깃·통증 변화·총 시간 + 휴지통(세션 cascade 삭제)
+- 활성 세션이 있으면 list 최상단에 "진행 중" 배지로 표시
+- `/logs/detail?id=<id>` 정적 export 호환 단일 라우트, `useSearchParams()`로 id 추출
+- 상세 페이지: 세션 메타 + child rows 4종 그루핑(hangboard/climbing/strength/campus) + 각 row 휴지통 + 세션 자체 삭제
+- 도메인 모듈에 `useSessionList` / `useDeleteSession` / `useDeleteHangboardLog` 추가 (climbing/strength/campus는 이미 있음)
+- PB filter `pb.filter()` 파라미터 바인딩 (S10 reference)
+**Acceptance Criteria:**
+- [ ] `/logs`에서 종료된 세션 list 보임 + 필터 4개 작동 + 페이지네이션
+- [ ] 세션 클릭 → 상세 진입 → child rows 모두 표시
+- [ ] 세션 cascade 삭제 / 개별 row 삭제 모두 confirm 후 작동
+- [ ] BottomNav "기록" 탭 진입 시 빈 화면이 아닌 list (또는 빈 상태 메시지)
 **Goal:** 네트워크 끊겨도 입력 가능, 복구 시 sync.
 **Dependencies:** S08, S09, S10, S11
 **Tasks:**

@@ -62,6 +62,22 @@ export function setActiveSessionId(id: string | null) {
 export const sessionKeys = {
   all: ["sessions"] as const,
   detail: (id: string) => [...sessionKeys.all, "detail", id] as const,
+  list: (filter: SessionListFilter) =>
+    [...sessionKeys.all, "list", filter] as const,
+};
+
+// ── List filter type ──
+export type SessionListFilter = {
+  /** ISO yyyy-mm-dd 이상. */
+  dateFrom?: string;
+  /** ISO yyyy-mm-dd 이하. */
+  dateTo?: string;
+  /** 부분 일치 (PB ~ 연산자). */
+  location?: string;
+  target?: string;
+  /** PB SDK 페이지(1-base). */
+  page: number;
+  perPage: number;
 };
 
 // ── Hooks ──
@@ -102,6 +118,66 @@ export function useCreateSession() {
     onSuccess: (rec) => {
       qc.setQueryData(sessionKeys.detail(rec.id), rec);
       setActiveSessionId(rec.id);
+    },
+  });
+}
+
+/**
+ * 세션 list — 필터 + 페이지네이션. PB SDK getList 사용.
+ * 비어있는 필드는 filter에서 제외 (전체 매칭).
+ */
+export function useSessionList(filter: SessionListFilter) {
+  return useQuery({
+    queryKey: sessionKeys.list(filter),
+    queryFn: async () => {
+      const parts: string[] = [];
+      const bindings: Record<string, unknown> = {};
+      if (filter.dateFrom) {
+        // PB는 date 필드를 UTC datetime으로 저장. 사용자는 KST 기준 yyyy-mm-dd 입력.
+        // KST 00:00:00 = UTC 전날 15:00:00 → ISO offset `+09:00`로 변환해 올바른 경계 매칭.
+        parts.push("date >= {:from}");
+        bindings.from = `${filter.dateFrom} 00:00:00.000+09:00`;
+      }
+      if (filter.dateTo) {
+        parts.push("date <= {:to}");
+        bindings.to = `${filter.dateTo} 23:59:59.999+09:00`;
+      }
+      if (filter.location?.trim()) {
+        parts.push("location ~ {:loc}");
+        bindings.loc = filter.location.trim();
+      }
+      if (filter.target?.trim()) {
+        parts.push("target ~ {:tgt}");
+        bindings.tgt = filter.target.trim();
+      }
+      const filterExpr = parts.length > 0 ? pb.filter(parts.join(" && "), bindings) : "";
+      return await pb
+        .collection(Collections.Sessions)
+        .getList<SessionRecord>(filter.page, filter.perPage, {
+          sort: "-date,-created",
+          filter: filterExpr,
+        });
+    },
+  });
+}
+
+export function useDeleteSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      // PB schema의 sessions → child cascade-delete relation으로
+      // hangboard/climbing/strength/campus_logs 모두 자동 정리됨.
+      await pb.collection(Collections.Sessions).delete(id);
+    },
+    onSuccess: (_v, id) => {
+      // 세션 list / detail / 모든 child collection list 무효화.
+      qc.invalidateQueries({ queryKey: sessionKeys.all });
+      qc.invalidateQueries({ queryKey: ["hangboard_logs"] });
+      qc.invalidateQueries({ queryKey: ["climbing_logs"] });
+      qc.invalidateQueries({ queryKey: ["strength_logs"] });
+      qc.invalidateQueries({ queryKey: ["campus_logs"] });
+      // 삭제한 세션이 활성이었으면 정리.
+      if (getActiveSessionId() === id) setActiveSessionId(null);
     },
   });
 }

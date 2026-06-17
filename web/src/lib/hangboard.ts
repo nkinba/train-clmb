@@ -1,5 +1,5 @@
-import { useMutation } from "@tanstack/react-query";
-import { newClientId } from "@/lib/pb";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Collections, newClientId, pb } from "@/lib/pb";
 import { queuedCreate } from "@/lib/mutation-queue";
 
 export type GripType = "half_crimp" | "open_hand";
@@ -32,6 +32,41 @@ export type CreateHangboardLogInput = {
   actual_hang_seconds: number;
   rpe?: number;
 };
+
+export const hangboardKeys = {
+  all: ["hangboard_logs"] as const,
+  bySession: (sessionId: string) =>
+    [...hangboardKeys.all, "session", sessionId] as const,
+};
+
+export function useHangboardLogsForSession(sessionId: string | null) {
+  return useQuery({
+    queryKey: [...hangboardKeys.all, "session", sessionId] as const,
+    queryFn: async (): Promise<HangboardLogRecord[]> => {
+      if (!sessionId) return [];
+      return await pb
+        .collection(Collections.HangboardLogs)
+        .getFullList<HangboardLogRecord>({
+          filter: pb.filter("session_id = {:sid}", { sid: sessionId }),
+          sort: "-created",
+        });
+    },
+    enabled: sessionId != null,
+  });
+}
+
+export function useDeleteHangboardLog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      // delete는 멱등하지 않아 큐 적용 안 함 (v1.1). 온라인 가정.
+      await pb.collection(Collections.HangboardLogs).delete(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: hangboardKeys.all });
+    },
+  });
+}
 
 export function useCreateHangboardLog() {
   return useMutation({

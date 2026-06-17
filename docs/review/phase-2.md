@@ -251,3 +251,51 @@
 | 🟢 makeFakeRecord JSDoc | **수용** | |
 | 🟢 queue item id 분리 | **수용 (코멘트)** | 의도 주석 추가. |
 | 추가: package.json idb-keyval | **수용** | `cd web && pnpm add idb-keyval` 재실행으로 정식 등록. |
+
+---
+
+## S19 — 2026-06-17
+
+### Subagent (general-purpose) 원문
+
+종합 평가: **accept-with-fixes** — Acceptance Criteria 충족 + cascade-delete 검증 OK. 날짜 필터 KST 경계 + "더 보기" 누적 표시 / fallback 스타일 등 작은 다듬기. Critical 없음.
+
+#### 🟡 Suggested
+- **S1.** `sessions.ts:135-143` 날짜 필터 KST 경계: `dateFrom`이 UTC 00:00로 해석되어 KST 09:00 이전 새벽 세션 누락. ISO offset `+09:00`로 변환.
+- **S2.** 동시 삭제 disabled — 현 구조 OK.
+- **S3.** `detail/page.tsx` Suspense fallback `mx-auto/max-w-md/pb-tab-bar` 누락.
+- **S4.** 빈 상태 메시지 "조건 없음 vs 전체 비어있음" 구분.
+- **S5.** `/logs/detail/?id=` 후행 슬래시 + query 패턴 — 의식적이면 OK.
+
+#### 🟢 Nit
+- N6. `isFetching` opacity 처리 안 함.
+- N7. **"더 보기"가 페이지 단위 교체 — 사용자 예상은 누적**.
+- N8. `formatDate` 중복 정의 (YAGNI).
+- N9. "진행 중"/"진행 중인 세션" 텍스트 불일치.
+
+#### 합격 항목
+- PB cascade-delete 마이그레이션 검증 (4 child collection 모두 `cascadeDelete: true`).
+- `pb.filter()` 파라미터 바인딩 인젝션 회피.
+- invalidateQueries 키 prefix 정확.
+- Suspense + useSearchParams Next 16 static export 호환.
+- id null guard.
+- 세션 삭제 후 router.replace + 활성 세션 정리.
+- 모바일 터치 타겟 + 진행 중 배지 + 종료 전 라벨.
+- confirm 두 단계 (세션/row).
+- del.isPending disabled.
+- 빈 상태/에러/loading 세 분기.
+- BottomNav padding.
+
+### 본인 수용/반박 판단
+
+| 항목 | 결정 | 사유 |
+| --- | --- | --- |
+| 🟡 S1 KST 경계 | **수용** | `+09:00` ISO offset으로 PB filter 정확. |
+| 🟡 S2 동시 삭제 | **반박** | 현 구조 OK. |
+| 🟡 S3 Suspense fallback 스타일 | **수용** | main 클래스 통일. |
+| 🟡 S4 빈 상태 분기 | **수용** | isFilterActive 분기. |
+| 🟡 S5 후행 슬래시 | **유지** | smoke 통과 + Caddy file_server 호환. |
+| 🟢 N6 isFetching opacity | **반박** | nit. |
+| 🟢 **N7 "더 보기" 누적** | **수용** | `accumulated` state로 누적 표시 + id 중복 제거 + 삭제 후 즉시 제거. |
+| 🟢 N8 formatDate 중복 | **반박** | YAGNI. |
+| 🟢 N9 "진행 중" 텍스트 통일 | **수용** | "진행 중"으로. |
