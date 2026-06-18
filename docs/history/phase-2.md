@@ -484,3 +484,40 @@ PRD §5는 "난이도 가중치 적용" 명시지만 첫 차트는 attempts만. 
 - chip 키보드 네비게이션 (arrow/Home/End) — 현재 마우스·터치 only. PainSelector 패턴 참조.
 - 검색 시 MRU 매칭 항목도 위에 노출하는 hybrid 모드 — UX 가설.
 - prebuilt 리스트 확장 (지방 짐 더 보강) — 사용자 피드백 받아 점진 추가.
+
+---
+
+## S22 — 2026-06-18 (commit d1ce865)
+
+### 변경 파일
+- `infra/pocketbase/pb_migrations/1750000002_gyms_targets.js` (신규) — `gyms` (22 seed) + `targets` (23 seed) 컬렉션. listRule `@request.auth.id != ''`, create/update/delete null (admin only). UNIQUE 인덱스 (`name` / `label`).
+- `web/src/lib/gyms.ts` (신규) — `useGyms()` (getFullList, sort `sort_order,name`, staleTime 5m, retry 1, refetchOnWindowFocus false). 카테고리 타입 + 라벨 맵.
+- `web/src/lib/targets.ts` (신규) — `useTargets()` 동일 패턴.
+- `web/src/components/picker.tsx` — `presets` prop을 PB 데이터로 교체. `SkeletonGrid` 추가 + 에러 시 fallback hint. `presets.length === 0` 가드로 stale cache 깜빡임 회피.
+- `web/src/lib/picker-presets.ts` 삭제.
+- `docs/STORIES.md` — S22 ✅.
+- `docs/review/phase-2.md` — S22 self-review.
+
+### 주요 의사결정 / 트레이드오프
+1. **글로벌 카탈로그 vs 사용자별**: gyms/targets에 user_id 없는 글로벌 read-only. 단일 사용자라 의도 일치. 다중 사용자 확장 시 user_id + create rule 추가 필요.
+2. **시드 위치**: 마이그레이션 `up`에서 직접 `saveRecord` — 별도 시드 스크립트 안 만듦. 환경 부트스트랩 1회용이라 over-engineering 회피.
+3. **로고 제외**: 사용자 요청에 따라 `logo` file 필드 보류. picker는 카테고리 아이콘만 사용. 향후 추가 시 마이그레이션 1개 + picker에 `<img>` 1줄.
+4. **staleTime 5분 + retry 1**: 카탈로그는 거의 안 바뀌므로 5분 캐시. retry 3 기본값은 401 발생 시 4번 호출 + fallback UI 깜빡임 → 1로 줄임. afterSend가 즉시 redirect 처리.
+5. **카테고리 라벨/아이콘 분리**: 라벨은 데이터 도메인(lib), 아이콘은 UI(component). lucide-react 의존을 lib까지 끌어들이지 않음 (S20 review에서도 동일 결정).
+6. **down 마이그레이션 try/catch**: `findCollectionByNameOrId`가 not found 시 throw — 부분 적용 상태 rollback 안전.
+
+### 검증
+- `pnpm build` 16/16 static pages.
+- `pnpm smoke` 모든 단계 OK.
+- 인터랙티브 (puppeteer ad-hoc): PB 호출 `/api/collections/gyms/records` + `/api/collections/targets/records` 200 확인, chip 45개(22+23) 로드, "더 클라임 홍대" 클릭 → 선택 반영, "강남" 검색 → 2개 필터.
+- SQLite 직접 조회: `SELECT COUNT(*) FROM gyms` = 22, `targets` = 23.
+
+### 다음 Story에 영향
+- **S21 (지도 SDK)**: 직접 입력 모드를 지도 검색으로 확장 시 `gyms` 컬렉션에 lat/lng 필드 + create rule 추가 마이그레이션 필요. 사용자가 검색 후 새 짐을 추가하면 PB에 저장됨.
+- **로고 추가 follow-up**: `gyms`에 `logo` file 필드 추가 마이그레이션 + PresetChip에 `<img>`. 로고 자산은 라이선스 확인 후 PB Admin 수동 업로드.
+- 운영 중 admin이 PB Admin UI에서 짐/타깃 추가 → 5분 내 picker 반영. 사용자가 즉시 보고 싶으면 hard refresh.
+
+### 미해결 follow-up
+- 로고 file 필드 + chip 이미지 (별도 Story).
+- 카탈로그 prefetch in `/app` boot — staleTime 안에서도 첫 진입 skeleton flash 회피 (선택).
+- gyms/targets에 `alias` 배열 추가 — "강남클파"처럼 별칭 검색 매칭 (UX 가설).
