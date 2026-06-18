@@ -180,6 +180,29 @@
 - (선택) 세션 record에 lat/lng 필드 추가 마이그레이션.
 **Out of scope (현 단계):** 지도 시각화, 거리 기반 추천.
 
+### S23 — 현재 세션 페이지 재구조화 ⬜
+**Goal:** 활성 세션 화면에서 행보드/등반/보조근력 카드를 메인 노출에서 빼고, "+ 운동 추가" 단일 버튼으로 모듈 선택을 한 단계 숨김. 대신 그 자리에 현 세션 동안 입력된 운동 항목들이 시간순으로 나열되는 timeline을 노출.
+**Dependencies:** S08 ✅, S09-S11 ✅
+**Tasks:**
+- `lib/sessions.ts`: `useActiveSessionLogs(sessionId)` — 4개 컬렉션 (hangboard/climbing/strength/campus)을 병렬 fetch + created 기준 시간순 정렬 + 단일 timeline array 반환. 각 row에 `kind`/`summary` 정규화.
+- `components/add-module-sheet.tsx` (또는 sheet 대신 inline modal): "+ 운동 추가" 버튼 → 4 모듈 (행보드 / 등반(Lead·Bouldering) / 보조 근력 / 캠퍼스) 선택. 각각 기존 라우트로 이동.
+- `app/(protected)/sessions/active/page.tsx`:
+  - 기존 `<section aria-label="모듈 선택">` 3장 카드 제거.
+  - `+ 운동 추가` CTA 하나 (h-tap-default brand).
+  - 그 아래에 timeline section — 각 row는 `Icon + 한 줄 요약 + 시각`. 빈 경우 "아직 추가된 운동이 없습니다" hint.
+  - row tap → 해당 모듈 라우트(또는 detail) 이동 (현 v1.0에서는 단순 이동만, 편집은 별도 Story).
+- 4개 lib (hangboard/climbing/strength/campus)에 row 삭제 mutation이 이미 있으면 timeline row swipe-to-delete는 follow-up.
+**Acceptance Criteria:**
+- [ ] /sessions/active에 3장 모듈 카드가 보이지 않음
+- [ ] "+ 운동 추가" 버튼 → 4 모듈 선택 → 해당 라우트로 이동
+- [ ] 활성 세션에 입력된 모든 운동 항목이 시간순으로 timeline에 표시됨
+- [ ] timeline에 모듈별 icon + 한 줄 요약 (예: "행보드 · 20mm half_crimp · 4/5세트")
+- [ ] 빈 상태 hint 노출
+- [ ] BottomNav + "세션 종료" 버튼 회귀 없음
+**Out of scope:**
+- timeline row tap 시 편집·삭제 — 별도 Story.
+- row swipe gesture.
+
 ### S22 — 짐/타깃 데이터테이블화 ✅
 **Goal:** S20의 lib 상수 prebuilt 리스트를 PB 컬렉션 2개 (`gyms`, `targets`)로 옮겨 운영 중 관리 가능하게 한다.
 **Dependencies:** S20 ✅
