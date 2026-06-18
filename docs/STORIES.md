@@ -180,6 +180,27 @@
 - (선택) 세션 record에 lat/lng 필드 추가 마이그레이션.
 **Out of scope (현 단계):** 지도 시각화, 거리 기반 추천.
 
+### S22 — 짐/타깃 데이터테이블화 ✅
+**Goal:** S20의 lib 상수 prebuilt 리스트를 PB 컬렉션 2개 (`gyms`, `targets`)로 옮겨 운영 중 관리 가능하게 한다.
+**Dependencies:** S20 ✅
+**Tasks:**
+- PB 마이그레이션 신규 (`infra/pocketbase/pb_migrations/1750000002_gyms_targets.js`):
+  - `gyms`: `name` (text, unique), `category` (select: gym-seoul/gym-suburb/outdoor/home), `sort_order` (number). List/View rule `@request.auth.id != ''`. Create/Update/Delete는 admin만.
+  - `targets`: `label` (text, unique), `category` (select: grade/condition/technique/casual), `sort_order` (number). 동일 rule.
+  - up: 현 `LOCATION_PRESETS` / `TARGET_PRESETS` 22+23개 그대로 seed (sort_order = 배열 인덱스).
+  - down: 두 컬렉션 삭제.
+- `web/src/lib/gyms.ts` — `useGyms()` (TanStack Query, perPage 200, sort `sort_order,name`).
+- `web/src/lib/targets.ts` — `useTargets()` 동일 패턴.
+- `web/src/components/picker.tsx` — `presets` prop을 PB 데이터로 교체, 로딩 skeleton, 카테고리 타입은 각 lib에 정의.
+- `web/src/lib/picker-presets.ts` 삭제.
+- 로고는 본 Story 범위 외 — `gyms`에 file 필드 없음.
+**Acceptance Criteria:**
+- [x] PB Admin UI에서 `gyms` / `targets` 컬렉션이 22+23개 레코드와 함께 보임
+- [x] /sessions/new 진입 시 PB 데이터로 chip 그리드 렌더 (네트워크 탭 `/api/collections/gyms/records` 확인)
+- [x] 비인증 시 401, 인증 시 200
+- [x] 로딩 중에는 skeleton chip 표시, 에러 시 직접 입력 fallback hint
+- [x] 기존 acceptance criteria (검색 / 직접 입력 / MRU / 48dp) 회귀 없음
+
 ### S23 — 현재 세션 페이지 재구조화 ⬜
 **Goal:** 활성 세션 화면에서 행보드/등반/보조근력 카드를 메인 노출에서 빼고, "+ 운동 추가" 단일 버튼으로 모듈 선택을 한 단계 숨김. 대신 그 자리에 현 세션 동안 입력된 운동 항목들이 시간순으로 나열되는 timeline을 노출.
 **Dependencies:** S08 ✅, S09-S11 ✅
@@ -202,51 +223,6 @@
 **Out of scope:**
 - timeline row tap 시 편집·삭제 — 별도 Story.
 - row swipe gesture.
-
-### S22 — 짐/타깃 데이터테이블화 ✅
-**Goal:** S20의 lib 상수 prebuilt 리스트를 PB 컬렉션 2개 (`gyms`, `targets`)로 옮겨 운영 중 관리 가능하게 한다.
-**Dependencies:** S20 ✅
-**Tasks:**
-- PB 마이그레이션 신규 (`infra/pocketbase/pb_migrations/1750000002_gyms_targets.js`):
-  - `gyms`: `name` (text, unique), `category` (select: gym-seoul/gym-suburb/outdoor/home), `sort_order` (number). List/View rule `@request.auth.id != ''`. Create/Update/Delete는 admin만.
-  - `targets`: `label` (text, unique), `category` (select: grade/condition/technique/casual), `sort_order` (number). 동일 rule.
-  - up: 현 `LOCATION_PRESETS` / `TARGET_PRESETS` 22+23개 그대로 seed (sort_order = 배열 인덱스).
-  - down: 두 컬렉션 삭제.
-- `web/src/lib/gyms.ts` — `useGyms()` (TanStack Query, perPage 200, sort `sort_order,name`).
-- `web/src/lib/targets.ts` — `useTargets()` 동일 패턴.
-- `web/src/components/picker.tsx` — `presets` prop을 PB 데이터로 교체, 로딩 skeleton, 카테고리 타입은 각 lib에 정의.
-- `web/src/lib/picker-presets.ts` 삭제.
-- 로고는 본 Story 범위 외 — `gyms`에 file 필드 없음.
-**Acceptance Criteria:**
-- [x] PB Admin UI에서 `gyms` / `targets` 컬렉션이 22+23개 레코드와 함께 보임
-- [x] /sessions/new 진입 시 PB 데이터로 chip 그리드 렌더 (네트워크 탭 `/api/collections/gyms/records` 확인)
-- [x] 비인증 시 401, 인증 시 200
-- [x] 로딩 중에는 skeleton chip 표시, 에러 시 직접 입력 fallback hint
-- [x] 기존 acceptance criteria (검색 / 직접 입력 / MRU / 48dp) 회귀 없음
-**Goal:** S08-S12에서 누락된 종료 세션 조회·삭제 흐름. BottomNav "기록" 탭이 살아남.
-**Dependencies:** S08, S09, S10, S11 (모두 ✅)
-**Tasks:**
-- `/logs` 페이지: 세션 list (최신순) + 필터(날짜 범위·장소·타깃) + 페이지네이션("더 보기")
-- list row: 날짜·장소·타깃·통증 변화·총 시간 + 휴지통(세션 cascade 삭제)
-- 활성 세션이 있으면 list 최상단에 "진행 중" 배지로 표시
-- `/logs/detail?id=<id>` 정적 export 호환 단일 라우트, `useSearchParams()`로 id 추출
-- 상세 페이지: 세션 메타 + child rows 4종 그루핑(hangboard/climbing/strength/campus) + 각 row 휴지통 + 세션 자체 삭제
-- 도메인 모듈에 `useSessionList` / `useDeleteSession` / `useDeleteHangboardLog` 추가 (climbing/strength/campus는 이미 있음)
-- PB filter `pb.filter()` 파라미터 바인딩 (S10 reference)
-**Acceptance Criteria:**
-- [ ] `/logs`에서 종료된 세션 list 보임 + 필터 4개 작동 + 페이지네이션
-- [ ] 세션 클릭 → 상세 진입 → child rows 모두 표시
-- [ ] 세션 cascade 삭제 / 개별 row 삭제 모두 confirm 후 작동
-- [ ] BottomNav "기록" 탭 진입 시 빈 화면이 아닌 list (또는 빈 상태 메시지)
-**Goal:** 네트워크 끊겨도 입력 가능, 복구 시 sync.
-**Dependencies:** S08, S09, S10, S11
-**Tasks:**
-- 모든 mutation을 IndexedDB 큐 경유
-- 온라인 복구 시 자동 flush
-- 큐 길이 UI 표시 (상단 배지)
-- 충돌 처리: created_at 기준 그대로 push (1인 앱이라 충돌 거의 없음)
-**Acceptance Criteria:**
-- [ ] Comet MCP: 오프라인 토글 후 입력 → 온라인 복구 시 동기화 확인
 
 ---
 
@@ -301,8 +277,9 @@
 **Tasks:** 주간 볼륨 / 평균 그레이드 추세 / 행보드 추정 1RM
 **Library:** Recharts
 
-### S17 — 음성 메모 입력 ⬜
-**Goal:** Web Speech API로 메모 받아쓰기.
+### ~~S17 — 음성 메모 입력~~ ❌ Cancelled
+~~**Goal:** Web Speech API로 메모 받아쓰기.~~
+**취소 사유:** 사용자 결정 (2026-06-19) — 우선순위 낮음, 텍스트 메모로 충분.
 
 ### S18 — 세션 미디어 (사진/영상 첨부) ⬜
 **Goal:** PRD §8의 폼 코칭/AI 분석 후보 — 본인 영상을 세션에 첨부, 반복 재생.
@@ -329,17 +306,23 @@
 ```
 S01 → S02, S03, S06
 S03 → S04 → S05
-S05, S07 → S08 → S09, S10, S11 → S12
+S05, S07 → S08 → S09, S10, S11 → S12 → S19
+S08 → S16 → (analysis)
+S08 → S20 → S21, S22
+S08, S09-S11 → S23
 S02, S06 → S13 → S14
-S04 → S15
+S04, S13 → S15
+S08, S13 → S18
 ```
 
 ## 진행 순서 권장
-1. S01 → S02 (문서 확정)
-2. S03 (디자인) — 동시에 S06 (백엔드 스키마)
-3. S04 → S05 → S07
-4. S08 → S09 (가장 어려운 것 일찍)
-5. S10 → S11
-6. S12 (오프라인 큐)
-7. S13 → S14 → S15 (배포)
-8. 1주 도그푸딩 후 S16, S17
+1. **Phase 0–1 (완료)**: S01–S07
+2. **Phase 2 핵심 (완료)**: S08 → S09 → S10 → S11 → S12 → S19
+3. **Phase 2 follow-up (완료)**: S20 → S22 (picker + 카탈로그 데이터화)
+4. **Phase 3 배포 (완료)**: S13 → S14 → S15
+5. **Phase 4 v1.1 (진행)**:
+   - S16 (분석) ✅
+   - S23 (현재 세션 timeline) ⬜
+   - S18 (세션 미디어 — R2 file storage) ⬜ ← 다음
+   - S21 (지도 SDK, 선택)
+   - ~~S17 음성 메모 (취소)~~
