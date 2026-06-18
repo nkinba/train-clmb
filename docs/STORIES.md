@@ -179,6 +179,27 @@
 - 장소 검색 dropdown → 선택 시 location.name(+ 위경도 메타) 저장.
 - (선택) 세션 record에 lat/lng 필드 추가 마이그레이션.
 **Out of scope (현 단계):** 지도 시각화, 거리 기반 추천.
+
+### S22 — 짐/타깃 데이터테이블화 ✅
+**Goal:** S20의 lib 상수 prebuilt 리스트를 PB 컬렉션 2개 (`gyms`, `targets`)로 옮겨 운영 중 관리 가능하게 한다.
+**Dependencies:** S20 ✅
+**Tasks:**
+- PB 마이그레이션 신규 (`infra/pocketbase/pb_migrations/1750000002_gyms_targets.js`):
+  - `gyms`: `name` (text, unique), `category` (select: gym-seoul/gym-suburb/outdoor/home), `sort_order` (number). List/View rule `@request.auth.id != ''`. Create/Update/Delete는 admin만.
+  - `targets`: `label` (text, unique), `category` (select: grade/condition/technique/casual), `sort_order` (number). 동일 rule.
+  - up: 현 `LOCATION_PRESETS` / `TARGET_PRESETS` 22+23개 그대로 seed (sort_order = 배열 인덱스).
+  - down: 두 컬렉션 삭제.
+- `web/src/lib/gyms.ts` — `useGyms()` (TanStack Query, perPage 200, sort `sort_order,name`).
+- `web/src/lib/targets.ts` — `useTargets()` 동일 패턴.
+- `web/src/components/picker.tsx` — `presets` prop을 PB 데이터로 교체, 로딩 skeleton, 카테고리 타입은 각 lib에 정의.
+- `web/src/lib/picker-presets.ts` 삭제.
+- 로고는 본 Story 범위 외 — `gyms`에 file 필드 없음.
+**Acceptance Criteria:**
+- [x] PB Admin UI에서 `gyms` / `targets` 컬렉션이 22+23개 레코드와 함께 보임
+- [x] /sessions/new 진입 시 PB 데이터로 chip 그리드 렌더 (네트워크 탭 `/api/collections/gyms/records` 확인)
+- [x] 비인증 시 401, 인증 시 200
+- [x] 로딩 중에는 skeleton chip 표시, 에러 시 직접 입력 fallback hint
+- [x] 기존 acceptance criteria (검색 / 직접 입력 / MRU / 48dp) 회귀 없음
 **Goal:** S08-S12에서 누락된 종료 세션 조회·삭제 흐름. BottomNav "기록" 탭이 살아남.
 **Dependencies:** S08, S09, S10, S11 (모두 ✅)
 **Tasks:**

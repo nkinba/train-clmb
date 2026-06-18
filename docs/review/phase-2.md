@@ -333,3 +333,37 @@
 | 🟢 2 `as` cast 제거 | **수용** | 시그널 명확. 타입 추론으로 충분. |
 | 🟡 3 아이콘 lib로 이동 | **반박** | 아이콘은 presentation layer. presets는 데이터. lib에 lucide-react 의존이 끌려오는 게 worse trade-off. |
 | 🟢 4-5 nits | 정보 | 변경 없음. |
+
+---
+
+## S22 — 2026-06-18
+
+### Subagent (general-purpose) 원문 요약
+
+| 항목 | 결과 |
+|---|---|
+| 22+23 레코드 시드 | ✅ SQLite 직접 조회로 확인 |
+| /sessions/new 진입 시 PB chip | ✅ useGyms/useTargets → presets prop |
+| 비인증 401 / 인증 200 | ✅ listRule `@request.auth.id != ''` |
+| 로딩 skeleton / 에러 fallback | ✅ presets.length===0 가드 + 분기 |
+| 기존 acceptance (검색/직접입력/MRU/48dp) 회귀 없음 | ✅ |
+
+#### Valid issues
+1. **`gyms.ts/targets.ts` useQuery 옵션 누락** — `retry:3` 기본값이 401 시 4번 호출. `retry:1`, `refetchOnWindowFocus:false` 권장. 공용 상수 분리 제안.
+2. **down 마이그레이션 throw** — `findCollectionByNameOrId`가 not found 시 throw. 가드가 throw 뒤로 가서 무효. try/catch 필요.
+3. **isError + AuthGuard redirect 깜빡임** — 401 시 fallback 메시지가 잠깐 보임. (1번 픽스로 완화)
+
+#### Nits
+4. `presets.length === 0` 가드 의도 주석 권장.
+5. PB `expand`/system 필드 타입 보강 (cosmetic).
+6. 카테고리 라벨(lib) + 아이콘(component) 분산은 책임 분리라 OK.
+
+### 본인 판단
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| 🔴 1 retry/refetch 옵션 | **수용** | 401 4번 호출 회피. 공용 상수는 hook 2개라 YAGNI — 직접 박음. |
+| 🔴 2 down 마이그레이션 try/catch | **수용** | 부분 적용 rollback 안전. |
+| 🟡 3 깜빡임 분기 | **반박** | 1번 픽스로 1회만 호출 → afterSend redirect 즉시. 별도 분기는 over-engineering. |
+| 🟢 4 가드 주석 | **수용** | 다음 사람의 풀어버림 방지. |
+| 🟢 5-6 nits | 정보 | 변경 없음. |

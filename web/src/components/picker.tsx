@@ -17,17 +17,21 @@ import {
 import { cn } from "@/lib/utils";
 import { getMru, type MruKey } from "@/lib/mru";
 import {
-  LOCATION_CATEGORY_LABEL,
-  LOCATION_PRESETS,
+  GYM_CATEGORY_LABEL,
+  useGyms,
+  type GymCategory,
+  type GymRecord,
+} from "@/lib/gyms";
+import {
   TARGET_CATEGORY_LABEL,
-  TARGET_PRESETS,
-  type LocationCategory,
+  useTargets,
   type TargetCategory,
-} from "@/lib/picker-presets";
+  type TargetRecord,
+} from "@/lib/targets";
 
 type Mode = "preset" | "custom";
 
-const LOCATION_ICON: Record<LocationCategory, LucideIcon> = {
+const LOCATION_ICON: Record<GymCategory, LucideIcon> = {
   "gym-seoul": Building2,
   "gym-suburb": Building2,
   outdoor: Mountain,
@@ -49,6 +53,8 @@ function PickerCore<C extends string>({
   placeholder,
   mruKey,
   presets,
+  isLoading,
+  isError,
   categoryLabel,
   iconFor,
 }: {
@@ -58,6 +64,8 @@ function PickerCore<C extends string>({
   placeholder: string;
   mruKey: MruKey;
   presets: { label: string; category: C }[];
+  isLoading: boolean;
+  isError: boolean;
   categoryLabel: Record<C, string>;
   iconFor: Record<C, LucideIcon>;
 }) {
@@ -169,8 +177,19 @@ function PickerCore<C extends string>({
             </div>
           )}
 
-          {/* 카테고리별 프리셋 */}
-          {grouped.length === 0 ? (
+          {/* 본문: 로딩 / 에러 / 결과.
+              presets.length === 0 가드는 stale cache가 남아있는 동안
+              skeleton/에러를 깜빡이지 않게 — 캐시 있으면 그대로 chip 표시. */}
+          {isLoading && presets.length === 0 ? (
+            <SkeletonGrid />
+          ) : isError && presets.length === 0 ? (
+            <p
+              role="status"
+              className="rounded-md bg-surface px-3 py-3 text-caption text-fg-muted"
+            >
+              카탈로그를 불러오지 못했어요. 우측 상단 &ldquo;직접 입력&rdquo;을 눌러 자유롭게 적어주세요.
+            </p>
+          ) : grouped.length === 0 ? (
             <p className="rounded-md bg-surface px-3 py-3 text-caption text-fg-muted">
               일치하는 프리셋이 없어요. 우측 상단 &ldquo;직접 입력&rdquo;을 눌러 자유롭게 적어주세요.
             </p>
@@ -229,6 +248,26 @@ function PresetChip({
   );
 }
 
+function SkeletonGrid() {
+  // 로딩 중 placeholder. 폭은 모바일 가독성 위해 약간 들쭉날쭉하게.
+  const widths = ["w-20", "w-24", "w-28", "w-16", "w-24", "w-20"];
+  return (
+    <div className="flex flex-col gap-1.5" aria-busy aria-live="polite">
+      <div className="flex flex-wrap gap-2">
+        {widths.map((w, i) => (
+          <span
+            key={i}
+            className={cn(
+              "min-h-tap animate-pulse rounded-full bg-elevated",
+              w,
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LocationPicker({
   value,
   onChange,
@@ -236,15 +275,26 @@ export function LocationPicker({
   value: string;
   onChange: (next: string) => void;
 }) {
+  const { data, isLoading, isError } = useGyms();
+  const presets = useMemo(
+    () =>
+      (data ?? []).map((g: GymRecord) => ({
+        label: g.name,
+        category: g.category,
+      })),
+    [data],
+  );
   return (
-    <PickerCore<LocationCategory>
+    <PickerCore<GymCategory>
       label="장소"
       value={value}
       onChange={onChange}
       placeholder="예) 더 클라임 강남"
       mruKey="cf:mru-locations"
-      presets={LOCATION_PRESETS}
-      categoryLabel={LOCATION_CATEGORY_LABEL}
+      presets={presets}
+      isLoading={isLoading}
+      isError={isError}
+      categoryLabel={GYM_CATEGORY_LABEL}
       iconFor={LOCATION_ICON}
     />
   );
@@ -257,6 +307,15 @@ export function TargetPicker({
   value: string;
   onChange: (next: string) => void;
 }) {
+  const { data, isLoading, isError } = useTargets();
+  const presets = useMemo(
+    () =>
+      (data ?? []).map((t: TargetRecord) => ({
+        label: t.label,
+        category: t.category,
+      })),
+    [data],
+  );
   return (
     <PickerCore<TargetCategory>
       label="메인 타깃"
@@ -264,7 +323,9 @@ export function TargetPicker({
       onChange={onChange}
       placeholder="예) V6 프로젝트 + 하프 크림프"
       mruKey="cf:mru-targets"
-      presets={TARGET_PRESETS}
+      presets={presets}
+      isLoading={isLoading}
+      isError={isError}
       categoryLabel={TARGET_CATEGORY_LABEL}
       iconFor={TARGET_ICON}
     />
