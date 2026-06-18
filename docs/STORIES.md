@@ -284,17 +284,43 @@
 ### S18 — 세션 미디어 (사진/영상 첨부) ⬜
 **Goal:** PRD §8의 폼 코칭/AI 분석 후보 — 본인 영상을 세션에 첨부, 반복 재생.
 **Dependencies:** S08 (세션 관리), ADR-6 (R2 객체 스토리지).
+**분할:** A (인프라) → B (컬렉션·업로드) → C (재생·라이브러리).
+
+#### S18-A — R2 file storage 인프라 전환 🔄
+**Goal:** PB file storage를 R2로 전환 + 미디어 토큰을 백업 토큰과 격리.
+**Dependencies:** S14 (R2 백업) ✅
 **Tasks:**
-- PB collection `media` 정의 (또는 `climbing_logs.media[]` 다중 파일 필드)
-- PB admin UI에서 **file storage를 R2로 전환** (endpoint/access key/secret/region/forcePathStyle 설정)
-- R2에 별도 access key + prefix `media/` 또는 별도 버킷으로 백업(`auto/`)과 격리
-- 모바일 file input (capture=user) → 업로드 → 진행률 표시
-- 세션 상세 페이지에 첨부 영상/사진 표시 (HTML5 `<video controls>` 또는 lightbox)
-- 라이브러리 뷰 (사용자별 미디어 일람 + 검색)
+- RUNBOOK §7.5 추가: PB Admin UI → Settings → Files → S3 storage 활성 + 미디어 prefix 설정 절차.
+- 미디어용 R2 API 토큰 별도 발급 (`media/` prefix 한정 또는 별도 버킷). 사용자 위임.
+- `.env.prod.example`에 미디어 자격증명 placeholder 추가 (PB는 admin UI로 설정하지만 ops 1Password 보관용 envvar 명시).
+- 검증: PB admin에서 테스트 이미지 1개 업로드 → R2 console에서 객체 확인.
 **Acceptance Criteria:**
-- [ ] 모바일에서 영상 캡처 → 첨부 → 30초 영상이 < 1분 내 업로드 완료 (4G 환경)
-- [ ] 세션 상세에서 영상 재생 가능 (R2 egress 0)
-- [ ] 다른 사용자(미인증) 접근 차단 (PB rule + presigned URL)
+- [ ] RUNBOOK §7.5 절차로 PB가 R2를 file storage로 사용
+- [ ] 백업 토큰과 미디어 토큰이 권한·prefix·lifecycle 정책 측에서 격리됨
+- [ ] PB admin에서 업로드한 테스트 파일이 R2 `media/` (또는 별도 버킷)에 도착
+
+#### S18-B — 미디어 컬렉션 + 업로드 흐름 ⬜
+**Goal:** PB `media` 컬렉션 + 모바일 file input + 진행률 표시.
+**Dependencies:** S18-A
+**Tasks:**
+- PB collection `media`: `session_id` (rel cascade), `client_id` (unique), `kind` (select: photo/video), `file` (file), `note` (text). list/view rule auth, create rule auth, delete rule own only.
+- `lib/media.ts` — `useSessionMedia(sessionId)`, `useUploadMedia()` (XHR progress + 오프라인 큐).
+- `components/media-uploader.tsx` — `<input type="file" accept="image/*,video/*" capture="environment">` + 진행률 bar.
+- `/sessions/active` timeline에 미디어 항목 통합 또는 `/logs/detail`에서만 표시.
+**Acceptance Criteria:**
+- [ ] 모바일에서 영상/사진 캡처 → 첨부 → 진행률 표시 → 저장
+- [ ] PB rule: 미인증 시 403, 인증 시 본인 미디어만
+
+#### S18-C — 재생 + 라이브러리 ⬜
+**Goal:** 세션 상세 영상 재생 + `/library` 일람.
+**Dependencies:** S18-B
+**Tasks:**
+- `/logs/detail`에 첨부 그리드 + lightbox/`<video controls>`.
+- `/library` 신규 라우트 (날짜별 그룹 + 검색).
+**Acceptance Criteria:**
+- [ ] 세션 상세에서 영상 재생 (R2 egress 0)
+- [ ] /library에서 전체 미디어 일람
+
 **Out of scope (v1.2+):**
 - 영상 transcoding / thumbnail 생성
 - AI 폼 분석 모델 연동 (별도 Phase)

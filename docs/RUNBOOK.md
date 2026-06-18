@@ -538,6 +538,56 @@ docker compose start pocketbase
 # ✅ 복원 리허설 완료 (2026-XX-XX). 백업 zip → staging 복원 → admin/user/session row 일치 확인.
 ```
 
+### 7.5 PB file storage R2 전환 (S18-A, v1.1 미디어 준비)
+
+세션 미디어(사진/영상)를 PB가 R2에 저장하도록 file storage를 전환. 백업 (`auto/`)과 권한·prefix·lifecycle 정책을 격리해 사고 영향 최소화.
+
+#### 7.5.1 미디어용 R2 access token 발급 (백업 토큰과 분리)
+
+Cloudflare Dashboard → R2 → **Manage API Tokens** → **Create API token**:
+- Permission: **Object Read & Write**
+- Specify bucket:
+  - **Option X (단일 버킷 + prefix 격리, 권장)**: §7.3.1의 `climb-forge-backups` 그대로 선택 + 토큰 권한 자체는 버킷 전체. PB가 객체를 `media/` prefix 아래에 둘 거라 *실질* 격리는 코드/PB 설정 측에서.
+  - **Option Y (별도 버킷, 더 강한 격리)**: 새 버킷 `climb-forge-media` 생성 후 그것만 선택. 백업 토큰이 새도 미디어 0 영향, 역도 동일.
+- TTL: 만료 없음 (운영) 또는 1년 (보안 강화).
+- Generate → **Access Key ID / Secret / Account ID**를 1Password에 즉시 저장 (한 번만 표시).
+
+> 본 RUNBOOK 예시는 **Option Y (별도 버킷 `climb-forge-media`)**를 가정. Option X로 가도 동일하게 prefix만 다르게 적용.
+
+#### 7.5.2 미디어 버킷 lifecycle 정책
+
+미디어는 사용자가 명시적으로 삭제할 때까지 영구 보관 — **lifecycle 룰 없음**. 백업과 다른 점.
+
+#### 7.5.3 PB Admin UI에서 S3 file storage 활성
+
+PB Admin (`https://<PB_DOMAIN>/_/`) → 좌측 **Settings** → **Files** → **Use S3 storage** 토글:
+
+| 필드 | 값 |
+|---|---|
+| Endpoint | `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` |
+| Bucket | `climb-forge-media` (Option Y) 또는 `climb-forge-backups` (Option X) |
+| Region | `auto` |
+| Access key | 위에서 발급한 미디어 토큰 Access Key ID |
+| Secret | 위에서 발급한 Secret |
+| Force path style | **off** (R2 표준은 virtual-hosted style) |
+
+**Save settings** → PB가 즉시 file 필드 업로드/다운로드를 R2로 라우팅 시작. 기존 로컬 디스크 (`pb_data/storage/`) 파일은 그대로 두지만 새 업로드만 R2로 감 — 신규 도입이라 마이그레이션 부담 없음.
+
+#### 7.5.4 검증
+
+PB Admin → 임의 컬렉션 (예: 임시 `_test` 컬렉션에 file 필드 추가) → 작은 이미지 1개 업로드 → Save:
+
+```bash
+# 컨테이너 로그에서 S3 PUT이 보이면 OK:
+docker compose -f docker-compose.prod.yml logs --tail 30 pocketbase | grep -iE "s3|put"
+```
+
+R2 console (해당 버킷) → 객체 트리에서 `<collection_id>/<record_id>/<filename>` 경로로 도착했는지 확인.
+
+#### 7.5.5 PB → R2 cold-cache 영향
+
+PB는 file 응답에 short-lived 캐시를 두지만 R2 GET 자체는 첫 1회. 미디어 객체가 자주 access되면 PB 앞단 Caddy에 `Cache-Control` 설정 추가 검토 (별도 follow-up).
+
 ---
 
 ## 8. 프론트 배포 (S15)
