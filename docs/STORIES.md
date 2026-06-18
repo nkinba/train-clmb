@@ -201,7 +201,7 @@
 - [x] 로딩 중에는 skeleton chip 표시, 에러 시 직접 입력 fallback hint
 - [x] 기존 acceptance criteria (검색 / 직접 입력 / MRU / 48dp) 회귀 없음
 
-### S23 — 현재 세션 페이지 재구조화 ⬜
+### S23 — 현재 세션 페이지 재구조화 ✅
 **Goal:** 활성 세션 화면에서 행보드/등반/보조근력 카드를 메인 노출에서 빼고, "+ 운동 추가" 단일 버튼으로 모듈 선택을 한 단계 숨김. 대신 그 자리에 현 세션 동안 입력된 운동 항목들이 시간순으로 나열되는 timeline을 노출.
 **Dependencies:** S08 ✅, S09-S11 ✅
 **Tasks:**
@@ -214,12 +214,12 @@
   - row tap → 해당 모듈 라우트(또는 detail) 이동 (현 v1.0에서는 단순 이동만, 편집은 별도 Story).
 - 4개 lib (hangboard/climbing/strength/campus)에 row 삭제 mutation이 이미 있으면 timeline row swipe-to-delete는 follow-up.
 **Acceptance Criteria:**
-- [ ] /sessions/active에 3장 모듈 카드가 보이지 않음
-- [ ] "+ 운동 추가" 버튼 → 4 모듈 선택 → 해당 라우트로 이동
-- [ ] 활성 세션에 입력된 모든 운동 항목이 시간순으로 timeline에 표시됨
-- [ ] timeline에 모듈별 icon + 한 줄 요약 (예: "행보드 · 20mm half_crimp · 4/5세트")
-- [ ] 빈 상태 hint 노출
-- [ ] BottomNav + "세션 종료" 버튼 회귀 없음
+- [x] /sessions/active에 3장 모듈 카드가 보이지 않음
+- [x] "+ 운동 추가" 버튼 → 4 모듈 선택 → 해당 라우트로 이동
+- [x] 활성 세션에 입력된 모든 운동 항목이 시간순으로 timeline에 표시됨
+- [x] timeline에 모듈별 icon + 한 줄 요약 (예: "행보드 · 20mm half_crimp · 4/5세트")
+- [x] 빈 상태 hint 노출
+- [x] BottomNav + "세션 종료" 버튼 회귀 없음
 **Out of scope:**
 - timeline row tap 시 편집·삭제 — 별도 Story.
 - row swipe gesture.
@@ -322,7 +322,7 @@ S08, S13 → S18
 4. **Phase 3 배포 (완료)**: S13 → S14 → S15
 5. **Phase 4 v1.1 (진행)**:
    - S16 (분석) ✅
-   - S23 (현재 세션 timeline) ⬜
-   - S18 (세션 미디어 — R2 file storage) ⬜ ← 다음
+   - S23 (현재 세션 timeline) ✅
+   - S18 (세션 미디어 — R2 file storage) ⬜ ← 다음 (S18-A 인프라부터)
    - S21 (지도 SDK, 선택)
    - ~~S17 음성 메모 (취소)~~

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Dumbbell, Hand, Timer } from "lucide-react";
+import { Dumbbell, Hand, Mountain, Plus, Timer, type LucideIcon } from "lucide-react";
+import { AddModuleSheet } from "@/components/add-module-sheet";
 import { NumberStepper } from "@/components/number-stepper";
 import { PainSelector } from "@/components/pain-selector";
 import {
@@ -13,6 +14,13 @@ import {
   useSession,
   type PainLevel,
 } from "@/lib/sessions";
+import {
+  labelOfKind,
+  routeOfKind,
+  useActiveSessionLogs,
+  type TimelineEntry,
+  type TimelineKind,
+} from "@/lib/active-logs";
 
 export default function ActiveSessionPage() {
   const router = useRouter();
@@ -33,6 +41,8 @@ export default function ActiveSessionPage() {
 
   const sessionQuery = useSession(activeId);
   const endSession = useEndSession(activeId);
+  const timeline = useActiveSessionLogs(activeId);
+  const [addOpen, setAddOpen] = useState(false);
 
   // PB에서 해당 ID가 404면 localStorage가 stale — 정리 후 새 세션 폼으로.
   // (다른 디바이스에서 종료했거나 admin UI에서 삭제된 경우.)
@@ -92,7 +102,7 @@ export default function ActiveSessionPage() {
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 py-6 pb-[calc(var(--spacing-tab-bar)+2rem)]">
       <header>
         <h1 className="text-h1 font-bold text-fg-primary">현재 세션</h1>
-        <p className="text-caption text-fg-muted">하위 모듈에서 기록을 추가하세요.</p>
+        <p className="text-caption text-fg-muted">운동을 추가하면 아래 기록에 누적됩니다.</p>
       </header>
 
       {sessionQuery.isPending && (
@@ -140,26 +150,18 @@ export default function ActiveSessionPage() {
             </dl>
           </section>
 
-          <section aria-label="모듈 선택" className="flex flex-col gap-3">
-            <ModuleCard
-              href="/sessions/active/hangboard/"
-              Icon={Hand}
-              title="행보드"
-              hint="매달리기 / 휴식 자동 타이머"
-            />
-            <ModuleCard
-              href="/sessions/active/climbing/"
-              Icon={Timer}
-              title="등반 (Lead / Bouldering)"
-              hint="그레이드 · 시도 · 완등 기록"
-            />
-            <ModuleCard
-              href="/sessions/active/strength/"
-              Icon={Dumbbell}
-              title="보조 근력 / 캠퍼스"
-              hint="웨이트 · 캠퍼스 보드 기록"
-            />
-          </section>
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="flex h-tap-default w-full items-center justify-center gap-2 rounded-lg bg-brand text-on-brand text-bodyLg font-semibold transition-colors hover:bg-brand-hover active:bg-brand-active"
+          >
+            <Plus size={20} aria-hidden />
+            운동 추가
+          </button>
+
+          <Timeline timeline={timeline} />
+
+          <AddModuleSheet open={addOpen} onClose={() => setAddOpen(false)} />
 
           {!showEndForm && (
             <button
@@ -259,49 +261,94 @@ function formatDate(iso: string): string {
   });
 }
 
-function ModuleCard({
-  href,
-  Icon,
-  title,
-  hint,
-  disabled,
-}: {
-  href: string;
-  Icon: typeof Hand;
-  title: string;
-  hint: string;
-  disabled?: boolean;
-}) {
-  const content = (
-    <div className="flex items-center gap-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-md bg-elevated text-fg-primary">
-        <Icon size={22} aria-hidden />
-      </span>
-      <div className="flex-1">
-        <p className="text-bodyLg font-semibold text-fg-primary">{title}</p>
-        <p className="text-caption text-fg-muted">{hint}</p>
-      </div>
-      <ChevronRight
-        size={20}
-        aria-hidden
-        className={disabled ? "text-fg-disabled" : "text-fg-muted"}
-      />
-    </div>
-  );
+const KIND_ICON: Record<TimelineKind, LucideIcon> = {
+  hangboard: Hand,
+  climbing: Mountain,
+  strength: Dumbbell,
+  campus: Timer,
+};
 
-  if (disabled) {
+function Timeline({
+  timeline,
+}: {
+  timeline: ReturnType<typeof useActiveSessionLogs>;
+}) {
+  if (timeline.isLoading && timeline.entries.length === 0) {
     return (
-      <div
-        aria-disabled={true}
-        className="rounded-lg bg-surface p-4 opacity-60"
-      >
-        {content}
-      </div>
+      <section aria-label="세션 기록" className="flex flex-col gap-2">
+        <h2 className="text-caption text-fg-secondary">세션 기록</h2>
+        <p className="text-caption text-fg-muted">불러오는 중…</p>
+      </section>
+    );
+  }
+  if (timeline.isError && timeline.entries.length === 0) {
+    return (
+      <section aria-label="세션 기록" className="flex flex-col gap-2">
+        <h2 className="text-caption text-fg-secondary">세션 기록</h2>
+        <p className="rounded-md bg-elevated px-3 py-2 text-caption text-status-danger">
+          기록을 불러오지 못했습니다.
+        </p>
+      </section>
     );
   }
   return (
-    <Link href={href} className="rounded-lg bg-surface p-4 hover:bg-elevated">
-      {content}
-    </Link>
+    <section aria-label="세션 기록" className="flex flex-col gap-2">
+      <h2 className="text-caption text-fg-secondary">
+        세션 기록 {timeline.entries.length > 0 && `· ${timeline.entries.length}건`}
+      </h2>
+      {timeline.entries.length === 0 ? (
+        <p className="rounded-lg bg-surface px-3 py-4 text-caption text-fg-muted">
+          아직 추가된 운동이 없습니다. 위 버튼으로 첫 운동을 추가하세요.
+        </p>
+      ) : (
+        <ol reversed className="flex flex-col gap-2">
+          {timeline.entries.map((e) => (
+            <TimelineRow key={`${e.kind}-${e.id}`} entry={e} />
+          ))}
+        </ol>
+      )}
+    </section>
   );
+}
+
+function TimelineRow({ entry }: { entry: TimelineEntry }) {
+  const Icon = KIND_ICON[entry.kind];
+  return (
+    <li>
+      <Link
+        href={routeOfKind(entry.kind)}
+        className="flex items-center gap-3 rounded-lg bg-surface p-3 hover:bg-elevated"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-md bg-elevated text-fg-primary">
+          <Icon size={18} aria-hidden />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-bodyLg font-semibold text-fg-primary">
+              {labelOfKind(entry.kind)}
+            </p>
+            <time
+              dateTime={entry.created}
+              className="shrink-0 text-micro text-fg-muted"
+            >
+              {formatTime(entry.created)}
+            </time>
+          </div>
+          <p className="truncate text-caption text-fg-secondary">
+            {entry.summary}
+          </p>
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }

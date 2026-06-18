@@ -367,3 +367,31 @@
 | 🟡 3 깜빡임 분기 | **반박** | 1번 픽스로 1회만 호출 → afterSend redirect 즉시. 별도 분기는 over-engineering. |
 | 🟢 4 가드 주석 | **수용** | 다음 사람의 풀어버림 방지. |
 | 🟢 5-6 nits | 정보 | 변경 없음. |
+
+---
+
+## S23 — 2026-06-19
+
+### Subagent (general-purpose) 원문 요약
+
+Acceptance Criteria 6개 모두 ✅. Valid issue 2건 + nit 일부.
+
+#### Valid issues
+1. **AddModuleSheet 캠퍼스 hint 불분명** — "캠퍼스 보드 (근력 페이지)" → 사용자가 캠퍼스 골랐는데 strength 폼이 열리는 흐름이 첫인상에 모호. hint 문구 명확화 권장. (deeplink param은 별도 작업.)
+2. **`Record<…, typeof Hand>` 타입 부정확** — picker.tsx와 일관성 위해 `LucideIcon` 사용. (page.tsx + add-module-sheet.tsx 두 곳.)
+3. **focus trap 부재** — 모바일 single-tap 우선 + ESC/외부 클릭 있어 v1.0 차단 이슈 아님. follow-up 가능.
+
+#### Nits
+- `useCreateXxxLog`의 `onSuccess` invalidation 확인 — 모두 `bySession` invalidate 있음 ✅. 복귀 시 자동 refetch.
+- `summary` 정규화 함수는 cross-cutting 표현 통일 위해 active-logs.ts 유지가 맞음 (리뷰어도 본인 반박 의견 정정).
+- `<ol>` desc 정렬 → `reversed` attribute 권장.
+
+### 본인 판단
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| 🔴 1 캠퍼스 hint 명확화 | **수용** | "보조 근력 페이지에서 함께 입력"으로 변경. |
+| 🔴 2 LucideIcon 타입 통일 | **수용** | picker.tsx와 일관성 + 정확한 타입. |
+| 🟡 3 focus trap | **반박** | 모바일 single-tap UX + ESC/외부 클릭 있음. v1.0 차단 이슈 아님. |
+| 🟢 nit ol reversed | **수용** | semantic 명확화. |
+| 🟢 mutation invalidation | 확인 완료 | 변경 없음. |
