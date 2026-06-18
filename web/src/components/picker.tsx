@@ -45,6 +45,9 @@ const TARGET_ICON: Record<TargetCategory, LucideIcon> = {
   casual: Smile,
 };
 
+// 야외·홈 카테고리는 picker UI에 노출 안 함 (PB 데이터는 유지 — 직접 입력 매칭은 가능).
+const VISIBLE_GYM_CATEGORIES: GymCategory[] = ["gym-seoul", "gym-suburb"];
+
 /** 공용 picker 내부 — 두 wrapper (Location/Target)에서 같이 사용. */
 function PickerCore<C extends string>({
   label,
@@ -278,10 +281,12 @@ export function LocationPicker({
   const { data, isLoading, isError } = useGyms();
   const presets = useMemo(
     () =>
-      (data ?? []).map((g: GymRecord) => ({
-        label: g.name,
-        category: g.category,
-      })),
+      (data ?? [])
+        .filter((g: GymRecord) => VISIBLE_GYM_CATEGORIES.includes(g.category))
+        .map((g: GymRecord) => ({
+          label: g.name,
+          category: g.category,
+        })),
     [data],
   );
   return (
