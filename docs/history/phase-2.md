@@ -521,3 +521,38 @@ PRD §5는 "난이도 가중치 적용" 명시지만 첫 차트는 attempts만. 
 - 로고 file 필드 + chip 이미지 (별도 Story).
 - 카탈로그 prefetch in `/app` boot — staleTime 안에서도 첫 진입 skeleton flash 회피 (선택).
 - gyms/targets에 `alias` 배열 추가 — "강남클파"처럼 별칭 검색 매칭 (UX 가설).
+
+---
+
+## S23 — 2026-06-19 (commit f85234d)
+
+### 변경 파일
+- `web/src/lib/active-logs.ts` (신규) — `useActiveSessionLogs(sessionId)`: 4개 child useQuery 병렬 + created desc 정렬 + 단일 TimelineEntry 배열. `routeOfKind` / `labelOfKind` 헬퍼. kind별 한 줄 summary 정규화 함수.
+- `web/src/components/add-module-sheet.tsx` (신규) — backdrop + 슬라이드업 sheet, ESC/외부 클릭 닫기, body scroll lock, 첫 항목 autofocus, 4 모듈 Link.
+- `web/src/app/(protected)/sessions/active/page.tsx` — 3장 ModuleCard 섹션 제거 → `+ 운동 추가` brand CTA + AddModuleSheet + inline `<Timeline>` (skeleton/error/empty/list 분기).
+- `docs/STORIES.md` — S23 ✅, 진행 순서 권장 갱신.
+- `docs/review/phase-2.md` — S23 self-review.
+
+### 주요 의사결정 / 트레이드오프
+1. **active-logs 위치**: 4개 child를 합치는 책임을 `lib/sessions.ts`에 두지 않고 별도 `lib/active-logs.ts`로 분리 — sessions의 본래 책임 (CRUD + 활성 ID)과 timeline 합성을 섞지 않기 위함.
+2. **summary 정규화 위치**: 각 도메인 lib(hangboard/climbing/...) 안에 두지 않고 active-logs.ts 중앙에 모음 — cross-cutting 한 줄 표현은 한 곳에서 통일 관리해야 표현 톤 (예: "리드/볼더", "근력/캠퍼스") 일관성 유지.
+3. **campus → strength 페이지 deeplink**: query param으로 type 자동 선택은 v1.0 범위 외. 현재는 hint 문구 ("보조 근력 페이지에서 함께 입력")로 명시.
+4. **focus trap**: 모바일 single-tap 우선 + ESC/외부 클릭 있어 v1.0 차단 이슈 아님. follow-up 가능.
+5. **`<ol reversed>`**: created desc 정렬을 semantic으로 표현.
+6. **mutation invalidation 의존**: useCreate{Hangboard,Climbing,Strength,Campus}Log 들이 이미 onSuccess에서 `bySession` invalidate → /sessions/active 복귀 시 자동 refetch. 추가 invalidation 불필요.
+
+### 검증
+- `pnpm build` 16/16 static pages.
+- `pnpm smoke` 모든 단계 OK (a07-sessions-active screenshot에 timeline + CTA 정상 표시).
+- 인터랙티브 (puppeteer ad-hoc): 세션 + 등반 + 근력 2건 시드 → /sessions/active에서 timeline 2건, "운동 추가" 클릭 → sheet 4 옵션 + 첫 항목 focus + ESC 닫기 모두 정상.
+
+### 다음 Story에 영향
+- **S18 (세션 미디어)**: 비슷한 패턴으로 미디어를 timeline에 inline 표시할 수 있음 — 다만 미디어는 별도 컬렉션이라 active-logs에 추가하는 게 좋을지, /logs/detail에만 표시할지 결정 필요.
+- **timeline row 편집/삭제**: 별도 Story로 분리 (Out of scope). swipe gesture 또는 long-press menu.
+- campus deeplink (`/sessions/active/strength/?type=campus`)는 작은 follow-up.
+
+### 미해결 follow-up
+- timeline row 편집/삭제 (UX 결정 필요).
+- campus deeplink param.
+- focus trap (모바일 키보드 사용자 접근성 강화 시).
+- /logs/detail에도 timeline 형태 적용? — 현재는 4 그룹별 표시. 통일이 좋을지 검토.
