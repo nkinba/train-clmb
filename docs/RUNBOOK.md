@@ -542,7 +542,17 @@ docker compose start pocketbase
 
 세션 미디어(사진/영상)를 PB가 R2에 저장하도록 file storage를 전환. 백업 (`auto/`)과 권한·prefix·lifecycle 정책을 격리해 사고 영향 최소화.
 
-#### 7.5.1 미디어용 R2 access token 발급 (백업 토큰과 분리)
+#### 7.5.1 미디어 버킷 생성
+
+§7.3.1과 동일 절차로 새 버킷 `climb-forge-media` 생성 (Option Y 기준).
+
+**Default storage class** 드롭다운:
+- **Standard** (권장) — 자주 보는 미디어. $0.015/GB·월, Class A $4.50/M, Class B $0.36/M.
+- Infrequent Access — 거의 안 보는 archival용. 저장은 싸지만 ops 2배 + 30일 최소 보관 패널티.
+
+> R2 무료 한도(월): Standard 10 GB storage / 1M Class A / 10M Class B / **egress 무료**. 개인 클라이밍 앱이면 한동안 $0 가능.
+
+#### 7.5.2 미디어용 R2 access token 발급 (백업 토큰과 분리)
 
 Cloudflare Dashboard → R2 → **Manage API Tokens** → **Create API token**:
 - Permission: **Object Read & Write**
@@ -554,11 +564,11 @@ Cloudflare Dashboard → R2 → **Manage API Tokens** → **Create API token**:
 
 > 본 RUNBOOK 예시는 **Option Y (별도 버킷 `climb-forge-media`)**를 가정. Option X로 가도 동일하게 prefix만 다르게 적용.
 
-#### 7.5.2 미디어 버킷 lifecycle 정책
+#### 7.5.3 미디어 버킷 lifecycle 정책
 
 미디어는 사용자가 명시적으로 삭제할 때까지 영구 보관 — **lifecycle 룰 없음**. 백업과 다른 점.
 
-#### 7.5.3 PB Admin UI에서 S3 file storage 활성
+#### 7.5.4 PB Admin UI에서 S3 file storage 활성
 
 PB Admin (`https://<PB_DOMAIN>/_/`) → 좌측 **Settings** → **Files** → **Use S3 storage** 토글:
 
@@ -573,7 +583,7 @@ PB Admin (`https://<PB_DOMAIN>/_/`) → 좌측 **Settings** → **Files** → **
 
 **Save settings** → PB가 즉시 file 필드 업로드/다운로드를 R2로 라우팅 시작. 기존 로컬 디스크 (`pb_data/storage/`) 파일은 그대로 두지만 새 업로드만 R2로 감 — 신규 도입이라 마이그레이션 부담 없음.
 
-#### 7.5.4 검증
+#### 7.5.5 검증
 
 PB Admin → 임의 컬렉션 (예: 임시 `_test` 컬렉션에 file 필드 추가) → 작은 이미지 1개 업로드 → Save:
 
@@ -584,7 +594,7 @@ docker compose -f docker-compose.prod.yml logs --tail 30 pocketbase | grep -iE "
 
 R2 console (해당 버킷) → 객체 트리에서 `<collection_id>/<record_id>/<filename>` 경로로 도착했는지 확인.
 
-#### 7.5.5 PB → R2 cold-cache 영향
+#### 7.5.6 PB → R2 cold-cache 영향
 
 PB는 file 응답에 short-lived 캐시를 두지만 R2 GET 자체는 첫 1회. 미디어 객체가 자주 access되면 PB 앞단 Caddy에 `Cache-Control` 설정 추가 검토 (별도 follow-up).
 
