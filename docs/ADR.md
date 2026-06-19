@@ -57,7 +57,7 @@
 ### 구현 메모 (S15)
 - `infra/prod/Caddyfile`에 두 번째 hostname 블록 추가: `{$APP_DOMAIN}` → `root /srv/app` + `file_server`.
 - `infra/prod/docker-compose.prod.yml`에 host 디렉토리(`${DATA_DIR}/app`) → caddy `/srv/app` 마운트.
-- 배포: 로컬에서 `pnpm build` → `rsync -av web/out/ <vm>:/opt/climb-forge/data/app/`. 자동화는 GitHub Actions로 follow-up.
+- 배포: 로컬에서 `pnpm build` → `rsync -av web/out/ <vm>:/opt/breakteau/data/app/`. 자동화는 GitHub Actions로 follow-up.
 - DDNS: DuckDNS에 서브도메인 2개 등록(`pb-...`, `app-...`) 또는 단일 와일드카드 대안 검토.
 
 ## ADR 4: 모바일 전달 방식 (PWA)

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Climb-Forge backup container entrypoint.
+# Breakteau backup container entrypoint.
 #
 # 매일 BACKUP_HOUR_UTC:BACKUP_MINUTE_UTC에 backup.sh 호출.
 # dcron/supercronic 없이 단순 sleep-loop — 환경변수 상속 + 로그를 docker logs로 직접.

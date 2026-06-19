@@ -295,7 +295,7 @@ export function LocationPicker({
       value={value}
       onChange={onChange}
       placeholder="예) 더 클라임 강남"
-      mruKey="cf:mru-locations"
+      mruKey="bt:mru-locations"
       presets={presets}
       isLoading={isLoading}
       isError={isError}
@@ -327,7 +327,7 @@ export function TargetPicker({
       value={value}
       onChange={onChange}
       placeholder="예) V6 프로젝트 + 하프 크림프"
-      mruKey="cf:mru-targets"
+      mruKey="bt:mru-targets"
       presets={presets}
       isLoading={isLoading}
       isError={isError}

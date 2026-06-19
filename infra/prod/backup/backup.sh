@@ -1,5 +1,5 @@
 #!/bin/bash
-# Climb-Forge 일일 백업 (S14, ADR-6 — R2).
+# Breakteau 일일 백업 (S14, ADR-6 — R2).
 #
 # 흐름:
 #   1) PB admin 토큰 발급 (PB API)
@@ -28,7 +28,7 @@ set -euo pipefail
 R2_PREFIX="${R2_PREFIX:-auto}"
 
 TS=$(date -u +%Y%m%d-%H%M%S)
-BACKUP_NAME="climb-forge-${TS}.zip"
+BACKUP_NAME="breakteau-${TS}.zip"
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -40,7 +40,7 @@ notify_failure() {
   local detail="$2"
   if [ -n "${BACKUP_ALERT_WEBHOOK:-}" ]; then
     local payload
-    payload=$(jq -nc --arg text "Climb-Forge backup FAILED at ${stage}: ${detail}" '{text:$text}')
+    payload=$(jq -nc --arg text "Breakteau backup FAILED at ${stage}: ${detail}" '{text:$text}')
     curl -fsS -X POST -H "Content-Type: application/json" \
       -d "$payload" "$BACKUP_ALERT_WEBHOOK" >/dev/null 2>&1 || true
   fi

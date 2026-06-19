@@ -10,7 +10,7 @@
 
 const MAX_ITEMS = 6;
 
-export type MruKey = "cf:mru-locations" | "cf:mru-targets";
+export type MruKey = "bt:mru-locations" | "bt:mru-targets";
 
 function safeRead(key: MruKey): string[] {
   if (typeof window === "undefined") return [];

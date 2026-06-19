@@ -1,6 +1,6 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// Climb-Forge initial schema (PRD §3 반영).
+// Breakteau initial schema (PRD §3 반영).
 // 모든 컬렉션에 client_id UNIQUE 인덱스 (ADR-4 오프라인 큐 멱등 재전송).
 // 자식 컬렉션 4종은 sessions에 cascade-delete relation.
 //

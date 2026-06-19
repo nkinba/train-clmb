@@ -1,4 +1,4 @@
-# Google Stitch Prompts — Climb-Forge
+# Google Stitch Prompts — Breakteau
 
 본 문서의 prompt를 Google Stitch에 그대로 입력하여 화면 mock을 생성한다.
 산출물(이미지/Figma 링크)은 `docs/design/` 아래에 화면명으로 저장.

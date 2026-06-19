@@ -43,8 +43,8 @@ export default function NewSessionPage() {
       },
       {
         onSuccess: () => {
-          pushMru("cf:mru-locations", cleanLocation);
-          pushMru("cf:mru-targets", cleanTarget);
+          pushMru("bt:mru-locations", cleanLocation);
+          pushMru("bt:mru-targets", cleanTarget);
           router.replace("/sessions/active/");
         },
       },

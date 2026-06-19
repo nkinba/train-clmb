@@ -1,4 +1,4 @@
-# Climb-Forge — Implementation Stories
+# Breakteau — Implementation Stories
 
 각 Story는 **구현 → 리뷰 → 수정 → 커밋** 워크플로우 1회 분량. 워크플로우 절차는 `CLAUDE.md` 참조.
 
@@ -260,7 +260,7 @@
 - `infra/prod/docker-compose.prod.yml`에 host 디렉토리(`${DATA_DIR}/app`) → caddy `/srv/app` 마운트, `${APP_DOMAIN:?}` fail-fast
 - `infra/prod/.env.prod.example` + RUNBOOK §3에 두 hostname (PB + 프론트) 등록 절차 (DDNS 시 서브도메인 2개)
 - 빌드: 로컬 `pnpm build` → `web/out/`. VM에 `rsync` 1회 절차 RUNBOOK에 명시
-- 자동화 (GitHub Actions, 옵션): main 푸시 시 `pnpm build` → `rsync -av out/ <vm>:/opt/climb-forge/data/app/` (SSH key는 GitHub secret)
+- 자동화 (GitHub Actions, 옵션): main 푸시 시 `pnpm build` → `rsync -av out/ <vm>:/opt/breakteau/data/app/` (SSH key는 GitHub secret)
 - PB 측 CORS Allowed Origins에 프론트 hostname 추가
 - `NEXT_PUBLIC_PB_URL`을 빌드 시점 PB hostname으로 빌드
 **Acceptance Criteria:**
@@ -280,6 +280,32 @@
 ### ~~S17 — 음성 메모 입력~~ ❌ Cancelled
 ~~**Goal:** Web Speech API로 메모 받아쓰기.~~
 **취소 사유:** 사용자 결정 (2026-06-19) — 우선순위 낮음, 텍스트 메모로 충분.
+
+### S24 — 프로젝트명 Breakteau 리브랜딩 ✅
+**Goal:** 프로젝트 식별자/표시 이름을 `climb-forge`/`Climb-Forge`에서 `breakteau`/`Breakteau`로 일괄 변경.
+**Dependencies:** 없음 (선행 처리).
+**명명 규칙:**
+- 표시 이름: `Breakteau` (= break + plateau)
+- lowercase 식별자: `breakteau`
+- localStorage 키 prefix: `bt:` (이전 `cf:`)
+- 컨테이너/이미지: `breakteau-pb` / `breakteau-pocketbase:<v>` / `breakteau-caddy` / `breakteau-backup:s14`
+- 경로 예시: `/opt/breakteau/...`
+- R2 버킷 예시: `breakteau-backups` / `breakteau-media`
+- 도메인 예시: `pb.breakteau.example.com` / `app.breakteau.example.com`
+- SW 캐시: `breakteau-shell-`
+**Tasks:**
+- 소스 코드: layout.tsx 메타데이터, manifest.webmanifest, icon SVG, sw.js, page.tsx UI 텍스트.
+- localStorage 키 `cf:` → `bt:` 치환 + `lib/pb.ts`에 one-shot 마이그레이션 (기존 `cf:` 키 발견 시 `bt:`로 복사 후 삭제).
+- 인프라: 모든 docker-compose 파일 (image/container_name), Dockerfile 헤더, Caddyfile 헤더, backup.sh의 BACKUP_NAME prefix.
+- env 템플릿: `.env.local.example`, `.env.prod.example` (도메인/버킷/경로 예시).
+- 문서: CLAUDE.md, PRD.md, ADR.md, RUNBOOK.md, STORIES.md, design-tokens.md, STITCH_PROMPTS.md, infra/*/README.md, web/AGENTS.md, .github/workflows/deploy-frontend.yml 헤더 주석.
+- history/review 파일은 점-인-타임 기록이라 그대로 유지.
+**Acceptance Criteria:**
+- [x] `git grep -i "climb-forge\|Climb-Forge"`가 docs/history, docs/review, 본 Story 정의 외 0건
+- [x] `pnpm build` 통과
+- [x] `pnpm smoke` 모든 단계 통과 (`title: "Breakteau"` 확인)
+- [x] 브라우저 진입 시 title/manifest name이 "Breakteau"
+- [x] 기존 dev localStorage(`cf:*`)가 `lib/pb.ts` one-shot으로 자동 마이그레이션
 
 ### S18 — 세션 미디어 (사진/영상 첨부) ⬜
 **Goal:** PRD §8의 폼 코칭/AI 분석 후보 — 본인 영상을 세션에 첨부, 반복 재생.

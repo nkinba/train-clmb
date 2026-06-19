@@ -4,13 +4,13 @@ import { SwRegister } from "@/components/sw-register";
 import { QueryProvider } from "@/components/query-provider";
 
 export const metadata: Metadata = {
-  title: "Climb-Forge",
+  title: "Breakteau",
   description: "개인 클라이밍 트레이닝 트래커 — 5.12 / V7 달성을 위한 훈련 기록",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Climb-Forge",
+    title: "Breakteau",
   },
   icons: {
     icon: "/icon.svg",

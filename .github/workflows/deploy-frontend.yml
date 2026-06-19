@@ -1,4 +1,4 @@
-# Climb-Forge 프론트 자동 배포 (S15)
+# Breakteau 프론트 자동 배포 (S15)
 #
 # main 브랜치에 `web/` 변경 푸시 시:
 #   1) pnpm 캐시 활용 install
@@ -10,7 +10,7 @@
 #   DEPLOY_SSH_KEY      ED25519 private key 전문
 #   DEPLOY_HOST         VM 외부 IP 또는 hostname
 #   DEPLOY_USER         SSH user
-#   DEPLOY_PATH         /opt/climb-forge/data/app
+#   DEPLOY_PATH         /opt/breakteau/data/app
 
 name: Deploy frontend
 

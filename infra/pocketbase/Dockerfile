@@ -1,4 +1,4 @@
-# Climb-Forge PocketBase image — ADR-1 (단일 바이너리) + ADR-2 (IaC 동일성)
+# Breakteau PocketBase image — ADR-1 (단일 바이너리) + ADR-2 (IaC 동일성)
 #
 # 빌드:   docker compose build
 # 실행:   docker compose up

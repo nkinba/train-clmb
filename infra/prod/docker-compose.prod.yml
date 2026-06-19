@@ -1,4 +1,4 @@
-# Climb-Forge 운영 환경 (ADR-6, ADR-8 / S13, S14)
+# Breakteau 운영 환경 (ADR-6, ADR-8 / S13, S14)
 #
 # 구성:
 #   pocketbase: ../pocketbase/Dockerfile로 빌드. internal 네트워크만 노출.
@@ -6,7 +6,7 @@
 #   backup:     일일 백업 (S14). PB admin API → R2 업로드 → 30일 cleanup.
 #
 # 실행 (VM에서):
-#   cd /opt/climb-forge/infra/prod
+#   cd /opt/breakteau/infra/prod
 #   cp .env.prod.example .env && vi .env       # DOMAIN, ACME_EMAIL, R2_*, PB_ADMIN_* 채움
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d
 #
@@ -22,8 +22,8 @@ services:
       context: ../pocketbase
       args:
         PB_VERSION: 0.22.21
-    image: climb-forge-pocketbase:0.22.21
-    container_name: climb-forge-pb
+    image: breakteau-pocketbase:0.22.21
+    container_name: breakteau-pb
     restart: unless-stopped
     # host 8090 노출 안 함 — Caddy를 통해서만 외부 접근.
     expose:
@@ -44,7 +44,7 @@ services:
 
   caddy:
     image: caddy:2.8-alpine
-    container_name: climb-forge-caddy
+    container_name: breakteau-caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -69,8 +69,8 @@ services:
   backup:
     build:
       context: ./backup
-    image: climb-forge-backup:s14
-    container_name: climb-forge-backup
+    image: breakteau-backup:s14
+    container_name: breakteau-backup
     restart: unless-stopped
     # 컨테이너 내부 PB 접근 — internal 네트워크. R2는 외부라 public도 필요.
     networks:

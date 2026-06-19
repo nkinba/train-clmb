@@ -1,4 +1,4 @@
-# PocketBase — Climb-Forge
+# PocketBase — Breakteau
 
 ADR-1, ADR-2 기반 백엔드. 단일 바이너리 + SQLite. 로컬 ↔ GCP 모두 동일 Dockerfile.
 

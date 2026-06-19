@@ -31,7 +31,7 @@ export default function Home() {
         <header>
           <h1 className="text-h1 font-bold text-fg-primary">오늘</h1>
           <p className="text-caption text-fg-muted">
-            Climb-Forge · 단일 사용자 트레이닝 트래커
+            Breakteau · 단일 사용자 트레이닝 트래커
           </p>
         </header>
 

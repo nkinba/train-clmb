@@ -1,4 +1,4 @@
-# prod — Climb-Forge 운영 인프라
+# prod — Breakteau 운영 인프라
 
 PocketBase + Caddy(자동 SSL) + 백업 + **프론트 정적 서빙(S15)** 운영 컨테이너 구성. ADR-2, ADR-3, ADR-6, ADR-8.
 
@@ -37,7 +37,7 @@ internet ──443──> caddy (public + internal)
 ## 일상 명령
 
 ```bash
-cd /opt/climb-forge/infra/prod
+cd /opt/breakteau/infra/prod
 
 # 시작 / 중지
 docker compose -f docker-compose.prod.yml --env-file .env up -d

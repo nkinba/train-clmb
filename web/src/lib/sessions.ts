@@ -42,7 +42,7 @@ export type EndSessionInput = {
 // ── 활성 세션 추적 (localStorage) ──
 // Cloudflare Pages 정적 호스팅 + dynamic [id] 라우트 회피용.
 // 동시 활성 세션은 1개라는 단일 사용자 가정에서만 성립.
-const ACTIVE_KEY = "cf:active-session-id";
+const ACTIVE_KEY = "bt:active-session-id";
 
 export function getActiveSessionId(): string | null {
   if (typeof window === "undefined") return null;

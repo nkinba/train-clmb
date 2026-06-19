@@ -22,8 +22,8 @@ pnpm smoke
 `web/.env.local`에 추가하면 로그인 후 보호 라우트도 자동 검증:
 
 ```bash
-CF_TEST_EMAIL=test@example.com
-CF_TEST_PASSWORD=...
+BT_TEST_EMAIL=test@example.com
+BT_TEST_PASSWORD=...
 ```
 
 미설정 시 비인증 4개 라우트(`/login`, `/`, `/dev/components`, `/dev/pb-check`)만 검증.

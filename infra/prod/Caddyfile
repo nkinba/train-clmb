@@ -1,4 +1,4 @@
-# Climb-Forge Caddy — PB reverse proxy + 프론트 정적 서빙 (S13, S15).
+# Breakteau Caddy — PB reverse proxy + 프론트 정적 서빙 (S13, S15).
 #
 # 자동 SSL (Let's Encrypt) + HTTP/2/3 + gzip + 보안 헤더.
 # {$PB_DOMAIN} / {$APP_DOMAIN} / {$ACME_EMAIL}은 docker-compose가 환경변수로 주입.

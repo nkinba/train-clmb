@@ -12,6 +12,27 @@ export const pb = new PocketBase(
 );
 
 /**
+ * S24 리브랜딩 one-shot: 기존 dev/사용자 브라우저의 `cf:` 키를 `bt:`로 옮긴다.
+ * 한 번 마이그레이션되면 `cf:` 키는 사라지고 다음 진입부터는 no-op.
+ * SSR 안전 (window 가드).
+ */
+if (typeof window !== "undefined") {
+  for (const oldKey of [
+    "cf:active-session-id",
+    "cf:mru-locations",
+    "cf:mru-targets",
+  ]) {
+    const v = window.localStorage.getItem(oldKey);
+    if (v === null) continue;
+    const newKey = "bt:" + oldKey.slice(3);
+    if (window.localStorage.getItem(newKey) === null) {
+      window.localStorage.setItem(newKey, v);
+    }
+    window.localStorage.removeItem(oldKey);
+  }
+}
+
+/**
  * 서버 측 인증 실패(401) 시 클라이언트 authStore를 정리.
  * - JWT exp 클레임은 SDK가 isValid에서 자동 체크하지만,
  *   서버 측 revoke / 시계 차이 / 깨진 토큰은 isValid가 잡지 못함.

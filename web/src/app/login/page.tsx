@@ -68,7 +68,7 @@ export default function LoginPage() {
         <header className="space-y-1">
           <h1 className="text-h1 font-bold text-fg-primary">로그인</h1>
           <p className="text-caption text-fg-muted">
-            Climb-Forge · 1인 사용자 인증 (ADR-5)
+            Breakteau · 1인 사용자 인증 (ADR-5)
           </p>
         </header>
 

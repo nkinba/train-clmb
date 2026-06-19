@@ -1,4 +1,4 @@
-# Design Tokens — Climb-Forge
+# Design Tokens — Breakteau
 
 본 토큰은 Tailwind config로 옮길 기준값. 다크 모드 우선, 라이트는 보조.
 근거는 `UI.md` (한 손 조작·분필 손·암장 조명·풀스크린 타이머)에서 도출.

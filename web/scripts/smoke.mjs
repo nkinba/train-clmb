@@ -1,4 +1,4 @@
-// Climb-Forge — 로컬 dev 서버 스모크 검증 (Puppeteer).
+// Breakteau — 로컬 dev 서버 스모크 검증 (Puppeteer).
 //
 // 실행:
 //   cd web && pnpm dev              # 별도 터미널
@@ -6,9 +6,9 @@
 //
 // 환경변수 (.env.local — git 제외):
 //   NEXT_PUBLIC_PB_URL   PocketBase 베이스 URL (smoke는 미사용, 페이지가 사용).
-//   CF_BASE_URL          기본 http://localhost:3000.
-//   CF_TEST_EMAIL        설정 시 인증 흐름 실행.
-//   CF_TEST_PASSWORD     설정 시 인증 흐름 실행.
+//   BT_BASE_URL          기본 http://localhost:3000.
+//   BT_TEST_EMAIL        설정 시 인증 흐름 실행.
+//   BT_TEST_PASSWORD     설정 시 인증 흐름 실행.
 //
 // 결과:
 //   screenshots/*.png    각 단계 스크린샷.
@@ -20,10 +20,10 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs/promises";
 
-const BASE = process.env.CF_BASE_URL ?? "http://localhost:3000";
+const BASE = process.env.BT_BASE_URL ?? "http://localhost:3000";
 const PB_URL = process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090";
-const EMAIL = process.env.CF_TEST_EMAIL;
-const PASSWORD = process.env.CF_TEST_PASSWORD;
+const EMAIL = process.env.BT_TEST_EMAIL;
+const PASSWORD = process.env.BT_TEST_PASSWORD;
 
 // smoke가 생성하는 세션의 target prefix — cleanup이 잔존물도 정리할 수 있도록.
 const SMOKE_TAG = "[smoke-cleanup]";
@@ -105,7 +105,7 @@ async function runUnauth(browser) {
 
 async function runAuth(browser) {
   if (!EMAIL || !PASSWORD) {
-    logStep({ skip: "auth", reason: "CF_TEST_EMAIL/CF_TEST_PASSWORD 미설정" });
+    logStep({ skip: "auth", reason: "BT_TEST_EMAIL/BT_TEST_PASSWORD 미설정" });
     return;
   }
 
@@ -182,7 +182,7 @@ async function runAuth(browser) {
       // puppeteer 새 페이지에 PB 토큰 + 활성 세션 ID 주입 (LocalAuthStore는 페이지 간 공유 X).
       await p.evaluateOnNewDocument(({ token, activeId }) => {
         if (token) localStorage.setItem("pocketbase_auth", token);
-        if (activeId) localStorage.setItem("cf:active-session-id", activeId);
+        if (activeId) localStorage.setItem("bt:active-session-id", activeId);
       }, { token: pbAuthRaw, activeId: createdSessionId ?? "" });
 
       const inspect = await inspectPage(p, r.label);

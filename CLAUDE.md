@@ -1,4 +1,4 @@
-# Climb-Forge — Claude Code 지침
+# Breakteau — Claude Code 지침
 
 모바일 우선 클라이밍 트레이닝 트래커. 자세한 제품/아키텍처 컨텍스트는 `docs/PRD.md`, `docs/ADR.md` 참고. 구현 단위는 `docs/STORIES.md`.
 
@@ -74,7 +74,7 @@ UI/프론트엔드 변경은 두 도구로 검증한다.
 ### 보조: `pnpm smoke` (puppeteer / CI·회귀용)
 
 - `web/scripts/smoke.mjs`. 비인증 4개 + (자격증명 있으면) 인증 흐름 + 활성 세션 1개 생성/cleanup.
-- 자격증명은 `web/.env.local`의 `CF_TEST_EMAIL` / `CF_TEST_PASSWORD` — **PB users 컬렉션의 일반 user**이지 `_superusers`/admin 자격증명이 아님에 주의.
+- 자격증명은 `web/.env.local`의 `BT_TEST_EMAIL` / `BT_TEST_PASSWORD` — **PB users 컬렉션의 일반 user**이지 `_superusers`/admin 자격증명이 아님에 주의.
 - 결과: `web/screenshots/*.png` + stdout JSONL.
 - 사용 시점:
   - chrome-devtools MCP가 일시적으로 작동 불가일 때 대체 검증.

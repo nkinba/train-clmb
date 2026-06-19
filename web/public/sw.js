@@ -1,4 +1,4 @@
-// Climb-Forge Service Worker (Phase 1 baseline)
+// Breakteau Service Worker (Phase 1 baseline)
 // S04 범위: 설치 + offline shell (HTML/CSS/JS만 캐시).
 //
 // TODO(S12): 본 SW는 v0 bootstrap. 다음을 S12에서 처리:
@@ -9,7 +9,7 @@
 //   3. IndexedDB 기반 mutation queue + online 이벤트로 PocketBase flush (PRD NFR §4)
 
 const CACHE_VERSION = "v0-bootstrap";
-const SHELL_CACHE = `climb-forge-shell-${CACHE_VERSION}`;
+const SHELL_CACHE = `breakteau-shell-${CACHE_VERSION}`;
 
 const SHELL_URLS = [
   "/",
@@ -32,7 +32,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith("climb-forge-shell-") && key !== SHELL_CACHE)
+            .filter((key) => key.startsWith("breakteau-shell-") && key !== SHELL_CACHE)
             .map((key) => caches.delete(key)),
         ),
       )
