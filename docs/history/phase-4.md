@@ -119,3 +119,31 @@
 - **오프라인 큐 통합** (S18-B에서 follow-up으로 명시했고 여전히 valid).
 - **HEIC → JPEG transcoding** (브라우저 native 지원 미흡).
 - 실제 디바이스 카메라 캡처 검증.
+
+---
+
+### S25 — timeline 미디어 row UX 보강 ✅ (2026-06-20, commit b49e925)
+
+#### 변경 파일
+- `web/src/app/(protected)/sessions/active/page.tsx` — `lightboxMedia` state + `useFileToken` + `MediaLightbox` 마운트. `Timeline` / `TimelineRow`에 `fileToken` / `onMediaClick` prop 추가. `isMedia` 분기로 button vs Link 결정. `MediaThumb` 신규 inline 컴포넌트 (36×36, video는 첫 프레임 + 작은 Video 오버레이, img는 lazy).
+
+#### 주요 의사결정 / 트레이드오프
+1. **클릭 시 router navigation 대신 modal**: 미디어 진입에 페이지 전환 부담 없음. /sessions/active에 머무르면서 lightbox로 재생 후 닫기 → 다음 운동 추가 자연스러움.
+2. **MediaLightbox 컴포넌트 재사용**: /logs/detail와 동일 — 새 컴포넌트 만들지 않음 (YAGNI).
+3. **fileToken을 page-level에서 한 번 호출 후 prop drilling**: TimelineRow 마다 useFileToken 호출하지 않고 위에서 받음. 같은 queryKey라 cache 공유라 차이는 작지만 hook 호출 횟수 ↓ + 명시적 데이터 흐름.
+4. **운동 row 편집/삭제는 본 Story 외**: PRD 일관 — timeline에서는 진입만, 편집은 모듈 페이지에서. 별도 Story로 분리 시 필요할 때 작업.
+5. **MediaThumb 36×36**: 다른 KIND_ICON과 같은 크기. 시각적 정렬 일관.
+
+#### 검증
+- `pnpm build` 17/17.
+- `pnpm smoke` 모든 단계 통과 (회귀 없음).
+- 인터랙티브 (puppeteer ad-hoc): 등반 + 미디어 row 2건 시드 → /sessions/active에서 row 2개, 미디어 row가 `<button aria-label*="보기">` + 내부에 `<img>` 썸네일, 등반 row는 `<a href="/sessions/active/climbing/">` Link 유지. 미디어 클릭 → MediaLightbox 열림 → ESC 닫힘.
+
+#### 다음 Story에 영향
+- /logs/detail의 미디어 그리드와 /sessions/active timeline에서 동일 lightbox UX — 사용자 mental model 일관.
+- 운동 row 편집/삭제 신규 Story 시 본 timeline에 swipe-to-delete 또는 long-press menu 추가 가능 (현재 button/Link 구조에 manipulation 추가).
+
+#### 미해결 follow-up
+- 운동 row 편집/삭제 (별도 Story).
+- timeline에서 미디어 row의 thumbnail이 실제 영상 첫 프레임 받는 부담 — S18-C V3 follow-up과 동일 (썸네일 컬렉션).
+- 더 많은 미디어 row 누적 시 timeline 길이 — 일자/시간대 그룹 옵션.
