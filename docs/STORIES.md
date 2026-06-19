@@ -307,7 +307,7 @@
 - [x] 브라우저 진입 시 title/manifest name이 "Breakteau"
 - [x] 기존 dev localStorage(`cf:*`)가 `lib/pb.ts` one-shot으로 자동 마이그레이션
 
-### S18 — 세션 미디어 (사진/영상 첨부) ⬜
+### S18 — 세션 미디어 (사진/영상 첨부) ✅
 **Goal:** PRD §8의 폼 코칭/AI 분석 후보 — 본인 영상을 세션에 첨부, 반복 재생.
 **Dependencies:** S08 (세션 관리), ADR-6 (GCS 객체 스토리지, 2026-06-19 갱신).
 **분할:** A (인프라) → B (컬렉션·업로드) → C (재생·라이브러리).
@@ -337,15 +337,15 @@
 - [x] 모바일에서 영상/사진 캡처 → 첨부 → 진행률 표시 → 저장
 - [x] PB rule: 미인증 list는 PB 관례상 200 + empty (listRule `@request.auth.id != ''`이 빈 필터처럼 동작), create는 403. 단일 사용자라 owner 분리 불필요
 
-#### S18-C — 재생 + 라이브러리 ⬜
+#### S18-C — 재생 + 라이브러리 ✅
 **Goal:** 세션 상세 영상 재생 + `/library` 일람.
 **Dependencies:** S18-B
 **Tasks:**
 - `/logs/detail`에 첨부 그리드 + lightbox/`<video controls>`.
 - `/library` 신규 라우트 (날짜별 그룹 + 검색).
 **Acceptance Criteria:**
-- [ ] 세션 상세에서 영상 재생 (PB ↔ GCS same-region 무료, 사용자 egress 1GB/월 무료 한도 내)
-- [ ] /library에서 전체 미디어 일람
+- [x] 세션 상세에서 영상 재생 (PB ↔ GCS same-region 무료, 사용자 egress 1GB/월 무료 한도 내)
+- [x] /library에서 전체 미디어 일람
 
 **Out of scope (v1.2+):**
 - 영상 transcoding / thumbnail 생성
@@ -375,6 +375,6 @@ S08, S13 → S18
 5. **Phase 4 v1.1 (진행)**:
    - S16 (분석) ✅
    - S23 (현재 세션 timeline) ✅
-   - S18 (세션 미디어 — GCS file storage) ⬜ ← 다음 (S18-A 인프라부터)
+   - S18 (세션 미디어 — GCS file storage) ✅ (A/B/C 완료)
    - S21 (지도 SDK, 선택)
    - ~~S17 음성 메모 (취소)~~

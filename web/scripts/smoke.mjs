@@ -159,6 +159,7 @@ async function runAuth(browser) {
     { label: "a03-logs", path: "/logs" },
     { label: "a04-analysis", path: "/analysis" },
     { label: "a05-settings", path: "/settings" },
+    { label: "a05b-library", path: "/library" },
     { label: "a06-sessions-new", path: "/sessions/new/" },
     { label: "a07-sessions-active", path: "/sessions/active/" },
     { label: "a08-hangboard", path: "/sessions/active/hangboard/" },

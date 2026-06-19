@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, ChartLine, ListChecks, Settings as SettingsIcon } from "lucide-react";
+import { CalendarDays, ChartLine, Images, ListChecks, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type TabId = "today" | "logs" | "analysis" | "settings";
+type TabId = "today" | "logs" | "analysis" | "library" | "settings";
 
 const TABS: { id: TabId; label: string; href: string; Icon: typeof CalendarDays }[] = [
   { id: "today", label: "오늘", href: "/", Icon: CalendarDays },
   { id: "logs", label: "기록", href: "/logs", Icon: ListChecks },
   { id: "analysis", label: "분석", href: "/analysis", Icon: ChartLine },
+  { id: "library", label: "미디어", href: "/library", Icon: Images },
   { id: "settings", label: "설정", href: "/settings", Icon: SettingsIcon },
 ];
 
@@ -23,6 +24,7 @@ function activeIdFor(pathname: string | null): TabId {
   if (!pathname) return "today";
   if (pathname.startsWith("/logs")) return "logs";
   if (pathname.startsWith("/analysis")) return "analysis";
+  if (pathname.startsWith("/library")) return "library";
   if (pathname.startsWith("/settings")) return "settings";
   return "today";
 }
@@ -36,7 +38,7 @@ export function BottomNav() {
       aria-label="주 탐색"
       className="fixed inset-x-0 bottom-0 z-[40] h-tab-bar border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
     >
-      <ul className="grid h-tab-bar grid-cols-4">
+      <ul className="grid h-tab-bar grid-cols-5">
         {TABS.map(({ id, label, href, Icon }) => {
           const isActive = id === activeId;
           return (
@@ -54,7 +56,7 @@ export function BottomNav() {
                   size={24}
                   strokeWidth={isActive ? 2.5 : 2}
                 />
-                <span>{label}</span>
+                <span className="whitespace-nowrap">{label}</span>
               </Link>
             </li>
           );

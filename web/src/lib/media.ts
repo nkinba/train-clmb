@@ -30,11 +30,59 @@ export const mediaKeys = {
   all: ["media"] as const,
   bySession: (sessionId: string) =>
     [...mediaKeys.all, "session", sessionId] as const,
+  library: () => [...mediaKeys.all, "library"] as const,
+  fileToken: () => ["pb-file-token"] as const,
 };
+
+/**
+ * PB의 file URL은 viewRule auth 필요 — `pb.files.getToken()`로 발급한 단명 토큰을
+ * 쿼리 파라미터로 부착. TTL은 PB 기본 약 5분이라 4분 staleTime + refetchInterval.
+ */
+export function useFileToken() {
+  // 인증 가드는 AuthGuard가 라우트 레벨에서 처리 — 본 hook은 보호 라우트 안에서만 호출됨.
+  // `pb.authStore.isValid`는 getter라 React가 변화 감지 못 함 → enabled 제거.
+  return useQuery({
+    queryKey: mediaKeys.fileToken(),
+    queryFn: () => pb.files.getToken(),
+    staleTime: 4 * 60 * 1000,
+    refetchInterval: 4 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * `<img src>` / `<video src>`에 직접 사용 가능한 file URL.
+ * token이 없으면 인증 사용자도 403 — useFileToken().data를 받아서 전달.
+ */
+export function mediaFileUrl(
+  rec: Pick<MediaRecord, "collectionId" | "id" | "file">,
+  token?: string,
+): string {
+  if (!rec.file) return "";
+  return pb.files.getUrl(
+    { collectionId: rec.collectionId, id: rec.id },
+    rec.file,
+    token ? { token } : undefined,
+  );
+}
+
+/** 전체 미디어 일람 — /library 페이지. 세션 필터 없이 created desc. */
+export function useAllMedia() {
+  return useQuery({
+    queryKey: mediaKeys.library(),
+    queryFn: async (): Promise<MediaRecord[]> => {
+      return await pb.collection(Collections.Media).getFullList<MediaRecord>({
+        sort: "-created",
+      });
+    },
+    staleTime: 60 * 1000,
+  });
+}
 
 export function useSessionMedia(sessionId: string | null) {
   return useQuery({
-    queryKey: [...mediaKeys.all, "session", sessionId] as const,
+    queryKey: sessionId ? mediaKeys.bySession(sessionId) : mediaKeys.all,
     queryFn: async (): Promise<MediaRecord[]> => {
       if (!sessionId) return [];
       return await pb

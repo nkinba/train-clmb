@@ -28,6 +28,8 @@ import {
   useCampusLogsForSession,
   useDeleteCampusLog,
 } from "@/lib/campus";
+import { useSessionMedia } from "@/lib/media";
+import { MediaGrid } from "@/components/media-grid";
 
 // static export 호환: useSearchParams는 Suspense boundary 필요 (Next 13.4+).
 export default function LogsDetailPage() {
@@ -60,6 +62,7 @@ function LogsDetailInner() {
   const climbQ = useClimbingLogsForSession(id);
   const strengthQ = useStrengthLogsForSession(id);
   const campusQ = useCampusLogsForSession(id);
+  const mediaQ = useSessionMedia(id);
 
   const delSession = useDeleteSession();
   const delHang = useDeleteHangboardLog();
@@ -252,6 +255,22 @@ function LogsDetailInner() {
               />
             ))}
           </LogGroup>
+
+          <section aria-label="미디어" className="flex flex-col gap-2">
+            <h2 className="text-caption text-fg-secondary">
+              미디어{" "}
+              {mediaQ.data && mediaQ.data.length > 0 && `· ${mediaQ.data.length}건`}
+            </h2>
+            {mediaQ.isPending ? (
+              <p className="text-caption text-fg-muted">불러오는 중…</p>
+            ) : mediaQ.data && mediaQ.data.length > 0 ? (
+              <MediaGrid items={mediaQ.data} />
+            ) : (
+              <p className="rounded-lg bg-surface px-3 py-3 text-caption text-fg-muted">
+                첨부된 미디어가 없습니다.
+              </p>
+            )}
+          </section>
 
           <button
             type="button"
