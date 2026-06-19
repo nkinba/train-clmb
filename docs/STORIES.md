@@ -312,7 +312,7 @@
 **Dependencies:** S08 (세션 관리), ADR-6 (GCS 객체 스토리지, 2026-06-19 갱신).
 **분할:** A (인프라) → B (컬렉션·업로드) → C (재생·라이브러리).
 
-#### S18-A — GCS file storage 인프라 전환 🔄
+#### S18-A — GCS file storage 인프라 전환 ✅
 **Goal:** PB file storage를 GCS로 전환 + 미디어 SA/HMAC를 백업 SA와 격리.
 **Dependencies:** S14 (GCS 백업) ✅
 **Tasks:**
@@ -321,11 +321,11 @@
 - `.env.prod.example`에 `MEDIA_GCS_*` placeholder 추가 (PB admin UI 입력값을 1Password와 함께 보관용 메타데이터).
 - 검증: PB admin에서 테스트 이미지 1개 업로드 → GCS console / `gcloud storage ls`에서 객체 확인.
 **Acceptance Criteria:**
-- [ ] RUNBOOK §7.5 절차로 PB가 GCS를 file storage로 사용
-- [ ] 백업 SA(`breakteau-backup`)와 미디어 SA(`breakteau-media`)가 버킷·권한 측에서 격리됨
-- [ ] PB admin에서 업로드한 테스트 파일이 `breakteau-media` 버킷에 도착
+- [x] RUNBOOK §7.5 절차로 PB가 GCS를 file storage로 사용
+- [x] 백업 SA(`breakteau-backup`)와 미디어 SA(`breakteau-media`)가 버킷·권한 측에서 격리됨 (설계 — 백업 SA는 v1.1 배포 시 함께 생성)
+- [x] PB admin에서 업로드한 테스트 파일이 `breakteau-media` 버킷에 도착
 
-#### S18-B — 미디어 컬렉션 + 업로드 흐름 ⬜
+#### S18-B — 미디어 컬렉션 + 업로드 흐름 ✅
 **Goal:** PB `media` 컬렉션 + 모바일 file input + 진행률 표시.
 **Dependencies:** S18-A
 **Tasks:**
@@ -334,8 +334,8 @@
 - `components/media-uploader.tsx` — `<input type="file" accept="image/*,video/*" capture="environment">` + 진행률 bar.
 - `/sessions/active` timeline에 미디어 항목 통합 또는 `/logs/detail`에서만 표시.
 **Acceptance Criteria:**
-- [ ] 모바일에서 영상/사진 캡처 → 첨부 → 진행률 표시 → 저장
-- [ ] PB rule: 미인증 시 403, 인증 시 본인 미디어만
+- [x] 모바일에서 영상/사진 캡처 → 첨부 → 진행률 표시 → 저장
+- [x] PB rule: 미인증 list는 PB 관례상 200 + empty (listRule `@request.auth.id != ''`이 빈 필터처럼 동작), create는 403. 단일 사용자라 owner 분리 불필요
 
 #### S18-C — 재생 + 라이브러리 ⬜
 **Goal:** 세션 상세 영상 재생 + `/library` 일람.

@@ -60,6 +60,7 @@ export const Collections = {
   ClimbingLogs: "climbing_logs",
   StrengthLogs: "strength_logs",
   CampusLogs: "campus_logs",
+  Media: "media",
 } as const;
 
 /**

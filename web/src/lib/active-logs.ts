@@ -15,18 +15,26 @@ import {
   useCampusLogsForSession,
   type CampusLogRecord,
 } from "@/lib/campus";
+import { useSessionMedia, type MediaRecord } from "@/lib/media";
 
-export type TimelineKind = "hangboard" | "climbing" | "strength" | "campus";
+export type TimelineKind =
+  | "hangboard"
+  | "climbing"
+  | "strength"
+  | "campus"
+  | "media";
 
 export type TimelineEntry = {
   id: string;
   kind: TimelineKind;
   created: string;
   summary: string;
+  /** media kind일 때만 — UI에서 썸네일/링크 표시용. */
+  media?: MediaRecord;
 };
 
-/** 항목 클릭 시 이동할 모듈 라우트 (campus는 strength 페이지에서 입력). */
-export function routeOfKind(kind: TimelineKind): string {
+/** 항목 클릭 시 이동할 모듈 라우트 (campus는 strength 페이지에서 입력, media는 v1.0에선 no-op). */
+export function routeOfKind(kind: TimelineKind): string | null {
   switch (kind) {
     case "hangboard":
       return "/sessions/active/hangboard/";
@@ -35,6 +43,8 @@ export function routeOfKind(kind: TimelineKind): string {
     case "strength":
     case "campus":
       return "/sessions/active/strength/";
+    case "media":
+      return null;
   }
 }
 
@@ -48,6 +58,8 @@ export function labelOfKind(kind: TimelineKind): string {
       return "근력";
     case "campus":
       return "캠퍼스";
+    case "media":
+      return "미디어";
   }
 }
 
@@ -60,11 +72,20 @@ export function useActiveSessionLogs(sessionId: string | null) {
   const climb = useClimbingLogsForSession(sessionId);
   const str = useStrengthLogsForSession(sessionId);
   const camp = useCampusLogsForSession(sessionId);
+  const media = useSessionMedia(sessionId);
 
   const isLoading =
-    hang.isLoading || climb.isLoading || str.isLoading || camp.isLoading;
+    hang.isLoading ||
+    climb.isLoading ||
+    str.isLoading ||
+    camp.isLoading ||
+    media.isLoading;
   const isError =
-    hang.isError || climb.isError || str.isError || camp.isError;
+    hang.isError ||
+    climb.isError ||
+    str.isError ||
+    camp.isError ||
+    media.isError;
 
   const entries = useMemo<TimelineEntry[]>(() => {
     const list: TimelineEntry[] = [];
@@ -72,10 +93,11 @@ export function useActiveSessionLogs(sessionId: string | null) {
     for (const r of climb.data ?? []) list.push(toClimbingEntry(r));
     for (const r of str.data ?? []) list.push(toStrengthEntry(r));
     for (const r of camp.data ?? []) list.push(toCampusEntry(r));
+    for (const r of media.data ?? []) list.push(toMediaEntry(r));
     // ISO 문자열 sort — created desc.
     list.sort((a, b) => b.created.localeCompare(a.created));
     return list;
-  }, [hang.data, climb.data, str.data, camp.data]);
+  }, [hang.data, climb.data, str.data, camp.data, media.data]);
 
   return { entries, isLoading, isError };
 }
@@ -128,5 +150,17 @@ function toCampusEntry(r: CampusLogRecord): TimelineEntry {
     kind: "campus",
     created: r.created,
     summary: `${r.exercise_type} (${rung}) · ${r.success_sets}/${r.total_sets}세트`,
+  };
+}
+
+function toMediaEntry(r: MediaRecord): TimelineEntry {
+  const kindLabel = r.kind === "video" ? "영상" : "사진";
+  const note = r.note ? ` · ${r.note}` : "";
+  return {
+    id: r.id,
+    kind: "media",
+    created: r.created,
+    summary: `${kindLabel}${note}`,
+    media: r,
   };
 }

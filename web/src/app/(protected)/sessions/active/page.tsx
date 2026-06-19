@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Dumbbell, Hand, Mountain, Plus, Timer, type LucideIcon } from "lucide-react";
+import { Dumbbell, Hand, Image as ImageIcon, Mountain, Plus, Timer, Video, type LucideIcon } from "lucide-react";
 import { AddModuleSheet } from "@/components/add-module-sheet";
+import { MediaUploadSheet } from "@/components/media-upload-sheet";
 import { NumberStepper } from "@/components/number-stepper";
 import { PainSelector } from "@/components/pain-selector";
 import {
@@ -43,6 +44,7 @@ export default function ActiveSessionPage() {
   const endSession = useEndSession(activeId);
   const timeline = useActiveSessionLogs(activeId);
   const [addOpen, setAddOpen] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
 
   // PB에서 해당 ID가 404면 localStorage가 stale — 정리 후 새 세션 폼으로.
   // (다른 디바이스에서 종료했거나 admin UI에서 삭제된 경우.)
@@ -150,18 +152,33 @@ export default function ActiveSessionPage() {
             </dl>
           </section>
 
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="flex h-tap-default w-full items-center justify-center gap-2 rounded-lg bg-brand text-on-brand text-bodyLg font-semibold transition-colors hover:bg-brand-hover active:bg-brand-active"
-          >
-            <Plus size={20} aria-hidden />
-            운동 추가
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="flex h-tap-default w-full items-center justify-center gap-2 rounded-lg bg-brand text-on-brand text-bodyLg font-semibold transition-colors hover:bg-brand-hover active:bg-brand-active"
+            >
+              <Plus size={20} aria-hidden />
+              운동 추가
+            </button>
+            <button
+              type="button"
+              onClick={() => setMediaOpen(true)}
+              className="flex h-tap items-center justify-center gap-2 rounded-lg border border-subtle text-fg-primary text-body font-medium transition-colors hover:bg-elevated"
+            >
+              <ImageIcon size={18} aria-hidden />
+              미디어 첨부
+            </button>
+          </div>
 
           <Timeline timeline={timeline} />
 
           <AddModuleSheet open={addOpen} onClose={() => setAddOpen(false)} />
+          <MediaUploadSheet
+            open={mediaOpen}
+            onClose={() => setMediaOpen(false)}
+            sessionId={session.id}
+          />
 
           {!showEndForm && (
             <button
@@ -266,6 +283,7 @@ const KIND_ICON: Record<TimelineKind, LucideIcon> = {
   climbing: Mountain,
   strength: Dumbbell,
   campus: Timer,
+  media: ImageIcon,
 };
 
 function Timeline({
@@ -312,33 +330,51 @@ function Timeline({
 }
 
 function TimelineRow({ entry }: { entry: TimelineEntry }) {
-  const Icon = KIND_ICON[entry.kind];
-  return (
-    <li>
-      <Link
-        href={routeOfKind(entry.kind)}
-        className="flex items-center gap-3 rounded-lg bg-surface p-3 hover:bg-elevated"
-      >
-        <span className="flex h-9 w-9 items-center justify-center rounded-md bg-elevated text-fg-primary">
-          <Icon size={18} aria-hidden />
-        </span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-bodyLg font-semibold text-fg-primary">
-              {labelOfKind(entry.kind)}
-            </p>
-            <time
-              dateTime={entry.created}
-              className="shrink-0 text-micro text-fg-muted"
-            >
-              {formatTime(entry.created)}
-            </time>
-          </div>
-          <p className="truncate text-caption text-fg-secondary">
-            {entry.summary}
+  const Icon =
+    entry.kind === "media" && entry.media?.kind === "video"
+      ? Video
+      : KIND_ICON[entry.kind];
+  const route = routeOfKind(entry.kind);
+
+  const inner = (
+    <>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-elevated text-fg-primary">
+        <Icon size={18} aria-hidden />
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-bodyLg font-semibold text-fg-primary">
+            {labelOfKind(entry.kind)}
           </p>
+          <time
+            dateTime={entry.created}
+            className="shrink-0 text-micro text-fg-muted"
+          >
+            {formatTime(entry.created)}
+          </time>
         </div>
-      </Link>
+        <p className="truncate text-caption text-fg-secondary">
+          {entry.summary}
+        </p>
+      </div>
+    </>
+  );
+
+  if (route) {
+    return (
+      <li>
+        <Link
+          href={route}
+          className="flex items-center gap-3 rounded-lg bg-surface p-3 hover:bg-elevated"
+        >
+          {inner}
+        </Link>
+      </li>
+    );
+  }
+  return (
+    <li className="flex items-center gap-3 rounded-lg bg-surface p-3">
+      {inner}
     </li>
   );
 }
