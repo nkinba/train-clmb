@@ -74,3 +74,48 @@
 - 오프라인 큐.
 - HEIC → JPEG transcoding (브라우저 native 지원 미흡, Safari iOS만 가능).
 - 영상 thumbnail 생성 (S18-C 라이브러리 그리드 위해).
+
+---
+
+### S18-C — 재생 + 라이브러리 ✅ (2026-06-19, commit 430f978)
+
+#### 변경 파일
+- `web/src/lib/media.ts` — `useFileToken()` (`pb.files.getToken()` 4분 stale/refetch), `mediaFileUrl(rec, token)` (PB SDK `pb.files.getUrl`로 `?token=...` 부착), `useAllMedia()` (라이브러리), `useSessionMedia`가 `mediaKeys.bySession` helper 일관 사용.
+- `web/src/components/media-lightbox.tsx` (신규) — backdrop + 영상/이미지 + window.confirm 삭제 + ESC/외부 클릭 닫기 + body scroll lock + 메모 footer.
+- `web/src/components/media-grid.tsx` (신규) — 3열 그리드, 영상은 `<video preload="metadata" muted playsInline>` 첫 프레임 + Play 오버레이, 이미지는 `<img loading="lazy">`. 클릭 → lightbox.
+- `web/src/app/(protected)/logs/detail/page.tsx` — `useSessionMedia` + `MediaGrid` 섹션 (세션 삭제 버튼 위에).
+- `web/src/app/(protected)/library/page.tsx` (신규) — `useAllMedia` + 일자별 그룹 + 빈 상태 hint.
+- `web/src/components/bottom-nav.tsx` — 4탭 → 5탭 (Images, "미디어", `/library`), `grid-cols-4` → `grid-cols-5`, label에 whitespace-nowrap.
+- `web/scripts/smoke.mjs` — `a05b-library` 라우트 추가.
+- `docs/STORIES.md` — S18 ✅ (A/B/C 모두), 진행 순서 권장 갱신.
+- `docs/review/phase-4.md` — S18-C self-review.
+
+#### 주요 의사결정 / 트레이드오프
+1. **PB file token via `?token=` 쿼리**: PB file은 viewRule auth라 헤더 인증이 불가능한 `<img>`/`<video src>`에 토큰을 URL 쿼리로 부착. PB SDK가 `pb.files.getUrl(rec, file, { token })`로 지원.
+2. **토큰 갱신 주기 4분**: PB 기본 file-token TTL 약 5분 (auth-token과 별개의 짧은 TTL). 4분 `refetchInterval`로 캐시 갱신. 단 mid-stream <video> range request의 token은 갱신 안 됨 — follow-up.
+3. **썸네일 없음 (원본 그대로)**: PB 마이그레이션의 file 필드에 `thumbs` 옵션 미설정. v1.0 1인 사용 가정에서 그리드 셀당 작은 이미지/영상 첫 프레임 다운로드는 허용. 누적 50개+ 시 thumb 도입 follow-up.
+4. **BottomNav 5탭**: 폼 분석이 PRD의 궁극적 가치 → 미디어를 자주 접근하는 1차 탭으로 승격. 390px 뷰포트에서 5칸 cell당 78px + 56dp 터치 타겟 OK.
+5. **삭제 `window.confirm`**: /logs/detail의 세션/하위 row 삭제 패턴과 일관. self-review에서 2-step 제안했다가 통일이 더 안전하다고 결정.
+6. **video preload="metadata" + muted + playsInline**: 모바일 자동 metadata 받기 + iOS Safari 자동재생 호환.
+7. **autoPlay**: 사용자 lightbox 진입 클릭 직후라 iOS Safari가 user-gesture로 인정 → 무음 없이도 재생 허용.
+
+#### 검증
+- `pnpm build` 17/17 (신규 /library).
+- `pnpm smoke` 모든 단계 통과 (a05b-library 추가).
+- 인터랙티브 (puppeteer ad-hoc):
+  - 세션 + 미디어 2건 시드 → /logs/detail에 "미디어 · 2건" + 그리드 셀 2개 노출.
+  - 그리드 첫 셀 클릭 → lightbox 열림 + ESC 닫힘.
+  - /library 진입 → 일자 그룹 1개 + 그리드 셀 2개.
+
+#### 다음 Story에 영향
+- **삭제 mutation 통합**: /sessions/active timeline에서도 미디어 row tap → lightbox + 삭제 가능 (현재는 라우트 null이라 클릭 불가). 통합 시 timeline UX 일관 ↑.
+- **검색 + 페이지네이션**: /library에서 미디어 수가 50개+ 누적 시 검색 input + 페이지네이션 필요. 도메인상 1~2년 후 follow-up.
+- **모바일 디바이스 실측**: 실제 iPhone에서 카메라 캡처 + GCS upload + 재생 흐름 검증 필요 — Wake Lock / camera capture는 모바일 OS 권한 흐름 미반영.
+
+#### 미해결 follow-up
+- **V2 토큰 mid-stream**: 5분+ 영상 재생 시 chunk 401. PB token TTL 늘리거나 video element가 새 토큰으로 재구성하는 패턴.
+- **V3 영상/이미지 thumb**: PB 마이그레이션에 thumbs 옵션 추가 + grid에서 thumb URL 사용. 누적 시 도입.
+- **미디어 검색** (제목/메모 텍스트).
+- **오프라인 큐 통합** (S18-B에서 follow-up으로 명시했고 여전히 valid).
+- **HEIC → JPEG transcoding** (브라우저 native 지원 미흡).
+- 실제 디바이스 카메라 캡처 검증.
