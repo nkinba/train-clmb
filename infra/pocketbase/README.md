@@ -60,7 +60,7 @@ docker compose up
 
 ## 백업 (S14 영역)
 
-자동 백업은 S14에서 구현(cron + R2). 현재는 수동 백업만:
+자동 백업은 S14에서 구현(cron + GCS, ADR-6 2026-06-19 갱신). 현재는 수동 백업만:
 
 ```bash
 docker compose stop
@@ -75,7 +75,7 @@ docker compose start
 - ✅ **컨테이너 비-root 사용자** — 본 Dockerfile에 `USER pb` (uid 100, gid 101). 로컬·prod 동일.
 - ✅ **PocketBase 바이너리 SHA256 검증** — 본 Dockerfile의 download 단계.
 - 🔜 **CORS 화이트리스트** — PB admin UI에서 첫 부팅 후 수동 설정. RUNBOOK §4.3 참조.
-- 🔜 **자동 백업** — **S14**에서 cron + R2.
+- 🔜 **자동 백업** — **S14**에서 cron + GCS.
 
 처음 띄우는 단계는 `docs/RUNBOOK.md` 참조.
 

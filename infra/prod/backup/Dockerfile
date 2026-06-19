@@ -1,6 +1,6 @@
 # Breakteau 백업 컨테이너 (S14, ADR-6).
 #
-# alpine + rclone(R2 업로드) + curl(PB admin API) + bash.
+# alpine + rclone(GCS S3 호환 업로드) + curl(PB admin API) + bash.
 # entrypoint가 매일 정해진 시각에 backup.sh를 호출하는 daily loop.
 
 FROM alpine:3.20

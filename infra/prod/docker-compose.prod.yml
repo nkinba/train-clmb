@@ -3,11 +3,11 @@
 # 구성:
 #   pocketbase: ../pocketbase/Dockerfile로 빌드. internal 네트워크만 노출.
 #   caddy:      80/443 호스트 바인딩. 자동 SSL(Let's Encrypt). PB로 reverse proxy.
-#   backup:     일일 백업 (S14). PB admin API → R2 업로드 → 30일 cleanup.
+#   backup:     일일 백업 (S14). PB admin API → GCS 업로드 → 30일 cleanup.
 #
 # 실행 (VM에서):
 #   cd /opt/breakteau/infra/prod
-#   cp .env.prod.example .env && vi .env       # DOMAIN, ACME_EMAIL, R2_*, PB_ADMIN_* 채움
+#   cp .env.prod.example .env && vi .env       # DOMAIN, ACME_EMAIL, GCS_*, PB_ADMIN_* 채움
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d
 #
 # 검증:
@@ -92,16 +92,16 @@ services:
       BACKUP_ON_START: ${BACKUP_ON_START:-0}
       # 실패 시 옵션 webhook 알림 (Slack/Discord/Telegram 등). 비어있으면 silent.
       BACKUP_ALERT_WEBHOOK: ${BACKUP_ALERT_WEBHOOK:-}
-      # R2 (Cloudflare) — S3 호환. rclone은 RCLONE_CONFIG_* 환경변수만으로 동작.
-      # 미디어(v1.1)는 별도 access key + 별도 prefix(`media/`) 또는 별도 버킷으로 격리 권장.
-      R2_BUCKET: ${R2_BUCKET:?R2_BUCKET required}
-      R2_PREFIX: ${R2_PREFIX:-auto}
-      RCLONE_CONFIG_R2_TYPE: s3
-      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
-      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID required}
-      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY required}
-      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:?R2_ACCOUNT_ID required}.r2.cloudflarestorage.com
-      RCLONE_CONFIG_R2_REGION: auto
+      # GCP Cloud Storage — S3 호환(Interoperability + HMAC). rclone은 RCLONE_CONFIG_* env로 동작.
+      # 미디어(v1.1)는 별도 버킷(`breakteau-media`) + 별도 SA/HMAC로 격리 권장.
+      GCS_BUCKET: ${GCS_BUCKET:?GCS_BUCKET required}
+      GCS_PREFIX: ${GCS_PREFIX:-auto}
+      RCLONE_CONFIG_GCS_TYPE: s3
+      RCLONE_CONFIG_GCS_PROVIDER: GCS
+      RCLONE_CONFIG_GCS_ACCESS_KEY_ID: ${GCS_ACCESS_KEY_ID:?GCS_ACCESS_KEY_ID required}
+      RCLONE_CONFIG_GCS_SECRET_ACCESS_KEY: ${GCS_SECRET_ACCESS_KEY:?GCS_SECRET_ACCESS_KEY required}
+      RCLONE_CONFIG_GCS_ENDPOINT: https://storage.googleapis.com
+      RCLONE_CONFIG_GCS_REGION: ${GCS_REGION:-us-west1}
 
 networks:
   internal:

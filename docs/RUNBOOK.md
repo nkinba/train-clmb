@@ -293,7 +293,7 @@ docker compose -f docker-compose.prod.yml logs -f --tail 100
 
 ```bash
 docker compose -f docker-compose.prod.yml logs --since 7d backup | grep -E 'FAILED|ERROR'
-# 빈 출력이면 OK. 항목이 보이면 해당 timestamp 로그 풀로 확인 + 자격증명/R2/PB endpoint 점검.
+# 빈 출력이면 OK. 항목이 보이면 해당 timestamp 로그 풀로 확인 + 자격증명/GCS/PB endpoint 점검.
 ```
 
 ### 6.2 재시작
@@ -359,13 +359,13 @@ BACKUP_ON_START=1 docker compose -f docker-compose.prod.yml up -d backup
 
 1. PocketBase admin API `POST /api/admins/auth-with-password` 토큰 발급
 2. `POST /api/backups` — PB 서버 측에서 WAL 일관성 보장 zip 생성
-3. zip 다운로드 + 무결성 검증 → **Cloudflare R2** 업로드 (rclone, S3 호환)
+3. zip 다운로드 + 무결성 검증 → **GCS (us-west1)** 업로드 (rclone S3 호환 + HMAC)
 4. PB 서버 측 zip 정리 (디스크 절약)
-5. R2 30일 이전 객체 cleanup (lifecycle 룰의 이중 안전망)
+5. GCS 30일 이전 객체 cleanup (lifecycle 룰의 이중 안전망)
 
-스케줄/대상 변경은 `.env`의 `BACKUP_HOUR_UTC` / `BACKUP_MINUTE_UTC` / `R2_BUCKET`.
+스케줄/대상 변경은 `.env`의 `BACKUP_HOUR_UTC` / `BACKUP_MINUTE_UTC` / `GCS_BUCKET`.
 
-**미디어 분리:** v1.1에서 PB file storage가 같은 R2를 사용하지만 prefix(`media/`) 또는 별도 access key/버킷으로 권한·cleanup 격리.
+**미디어 분리:** v1.1에서 PB file storage가 **별도 버킷(`breakteau-media`)** + **별도 SA/HMAC**을 사용해 백업과 권한·cleanup 격리.
 
 ### 7.1 PocketBase admin API (수동, 권장 — WAL 일관성 보장)
 
@@ -411,41 +411,71 @@ sudo chown -R 100:101 data/pb_data    # 비-root user 권한 복원
 docker compose -f docker-compose.prod.yml start pocketbase
 ```
 
-### 7.3 R2 셋업 (자동 백업 처음 띄울 때 1회)
+### 7.3 GCS 셋업 (자동 백업 처음 띄울 때 1회)
 
-#### 7.3.1 버킷 생성
+ADR-6 (2026-06-19 갱신) — 객체 스토리지는 **GCS Standard / us-west1** (VM과 동일 region) + S3 호환(Interoperability/HMAC).
 
-Cloudflare Dashboard → R2 → **Create bucket**:
-- 이름: `breakteau-backups` (또는 원하는 값 — `.env`의 `R2_BUCKET`과 일치).
-- 위치: Automatic 또는 가까운 region.
-- 미디어(v1.1)가 같은 버킷에 들어올 예정이면 `breakteau-storage` 같은 일반 명칭도 OK.
+#### 7.3.1 GCP 프로젝트 + 버킷 생성
 
-#### 7.3.2 백업 전용 API 토큰 발급
+GCP Console → Storage → Buckets → **Create**:
+- **Name:** `breakteau-backups` (글로벌 유니크 — `.env`의 `GCS_BUCKET`과 일치).
+- **Location type:** Region — **us-west1** (VM과 동일 → 트래픽 무료).
+- **Storage class:** **Standard** (자주 변경되는 백업).
+- **Access control:** Uniform (IAM only).
+- **Protection tools:** Soft delete (default 7-day) 그대로 두면 추가 안전망.
 
-R2 → **Manage API Tokens** → **Create API token**:
-- Permission: **Object Read & Write**
-- Specify bucket: 위에서 만든 단일 버킷만 (다른 버킷 영향 차단).
-- TTL: 만료 없음 (운영) 또는 1년 (보안 강화).
-- Generate → 보이는 **Access Key ID** / **Secret Access Key** / **Account ID**를 1Password 등에 즉시 저장. 한 번만 표시됨.
+#### 7.3.2 HMAC 키 발급 (S3 호환 access key)
 
-> **미디어용 토큰은 별도 발급 권장** (S18 v1.1) — `media/` prefix 한정 권한, PB env에 분리 주입. 백업 토큰이 새도 미디어에 영향 0, 역도 동일.
+GCS의 S3 호환은 service account-bound HMAC 키를 access key로 사용.
 
-#### 7.3.3 lifecycle 룰
+```bash
+# 1) backup 전용 service account 생성
+gcloud iam service-accounts create breakteau-backup \
+  --display-name="Breakteau backup uploader"
 
-R2 → 버킷 선택 → **Settings → Object lifecycle rules → Add rule**:
-- Prefix: `auto/` — 백업 컨테이너가 `auto/breakteau-*.zip`에 격리. 다른 prefix 영향 0.
-- Action: **Delete objects** after **30 days**.
+# 2) backup bucket에 ObjectAdmin 권한 (다른 버킷엔 권한 없음)
+gcloud storage buckets add-iam-policy-binding gs://breakteau-backups \
+  --member=serviceAccount:breakteau-backup@<PROJECT_ID>.iam.gserviceaccount.com \
+  --role=roles/storage.objectAdmin
 
-rclone의 `--min-age 30d` cleanup이 이중 안전망(같은 `auto/` 안에서만 동작). R2 lifecycle 룰이 우선이라 R2 측에 부담 위임.
+# 3) HMAC 키 발급
+gcloud storage hmac create breakteau-backup@<PROJECT_ID>.iam.gserviceaccount.com
+# 출력의 accessId(=ACCESS_KEY_ID) / secret(=SECRET_ACCESS_KEY)를 1Password에 즉시 저장.
+# secret은 한 번만 표시됨.
+```
 
-미디어(v1.1)는 별도 prefix(`media/`) — lifecycle 룰 적용 안 함(사용자가 명시적 삭제할 때까지 영구 보관).
+> **미디어용 SA는 별도 발급 권장** (S18, §7.5) — `breakteau-media` 버킷 전용 SA + HMAC. 백업 키가 새도 미디어 영향 0.
+
+GCP Console에서도 발급 가능: **Cloud Storage → Settings → Interoperability → Service account HMAC → Create a key for a service account**.
+
+#### 7.3.3 lifecycle 룰 (30일 자동 삭제)
+
+```bash
+cat > /tmp/lifecycle.json <<'EOF'
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "Delete" },
+        "condition": { "age": 30, "matchesPrefix": ["auto/"] }
+      }
+    ]
+  }
+}
+EOF
+gcloud storage buckets update gs://breakteau-backups --lifecycle-file=/tmp/lifecycle.json
+```
+
+rclone의 `--min-age 30d` cleanup이 이중 안전망(같은 `auto/` 안에서만 동작). GCS lifecycle 룰이 우선이라 GCS 측에 부담 위임.
+
+미디어(§7.5)는 별도 버킷(`breakteau-media`) — lifecycle 룰 적용 안 함(사용자 명시적 삭제까지 영구 보관).
 
 #### 7.3.4 `.env` 설정 + 컨테이너 재시작
 
 ```bash
 cd /opt/breakteau/infra/prod
-vi .env   # R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
-          # PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD 채움.
+vi .env   # GCS_BUCKET, GCS_REGION=us-west1, GCS_ACCESS_KEY_ID,
+          # GCS_SECRET_ACCESS_KEY, PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD 채움.
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build backup
 ```
 
@@ -460,18 +490,22 @@ docker compose -f docker-compose.prod.yml logs --tail 50 backup
 성공 로그 예시:
 
 ```
-[...Z] START backup breakteau-20260617-110000.zip → r2://breakteau-backups/auto/
+[...Z] START backup breakteau-20260619-110000.zip → gcs://breakteau-backups/auto/
 [...Z] auth admin
 [...Z] create snapshot ...
 [...Z] download ...
 [...Z] snapshot size: 24576 bytes
-[...Z] upload to r2://breakteau-backups/auto/breakteau-...zip
+[...Z] upload to gcs://breakteau-backups/auto/breakteau-...zip
 [...Z] cleanup PB server-side snapshot
-[...Z] cleanup R2 auto/ backups older than 30d
+[...Z] cleanup GCS auto/ backups older than 30d
 [...Z] OK backup completed ...
 ```
 
-R2 console에서 객체 존재 확인.
+GCP Console → Buckets → `breakteau-backups` → `auto/` 트리에서 객체 확인. 또는:
+
+```bash
+gcloud storage ls gs://breakteau-backups/auto/
+```
 
 이후 `BACKUP_ON_START=0`(또는 미설정)로 되돌리고 재시작:
 
@@ -484,18 +518,24 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d backup
 
 복원 절차의 신뢰성은 **실제로 한 번 해본 다음**에만 보장됨. **별도 staging VM(또는 로컬 macOS Docker)**에서 다음을 1회 수행하고 결과를 `docs/history/phase-3.md`에 기록:
 
-#### 7.4.1 R2에서 백업 zip 다운로드
+#### 7.4.1 GCS에서 백업 zip 다운로드
 
 ```bash
 docker run --rm \
-  -e RCLONE_CONFIG_R2_TYPE=s3 \
-  -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
-  -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
-  -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
-  -e RCLONE_CONFIG_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
-  -e RCLONE_CONFIG_R2_REGION=auto \
+  -e RCLONE_CONFIG_GCS_TYPE=s3 \
+  -e RCLONE_CONFIG_GCS_PROVIDER=GCS \
+  -e RCLONE_CONFIG_GCS_ACCESS_KEY_ID="$GCS_ACCESS_KEY_ID" \
+  -e RCLONE_CONFIG_GCS_SECRET_ACCESS_KEY="$GCS_SECRET_ACCESS_KEY" \
+  -e RCLONE_CONFIG_GCS_ENDPOINT="https://storage.googleapis.com" \
+  -e RCLONE_CONFIG_GCS_REGION="$GCS_REGION" \
   -v "$PWD:/data" \
-  rclone/rclone:latest copy r2:breakteau-backups/auto/<백업파일명> /data/
+  rclone/rclone:latest copy gcs:breakteau-backups/auto/<백업파일명> /data/
+```
+
+또는 `gcloud` CLI 사용 시(사용자 자격증명):
+
+```bash
+gcloud storage cp gs://breakteau-backups/auto/<백업파일명> ./
 ```
 
 #### 7.4.2 PB 인스턴스에 복원
@@ -538,65 +578,78 @@ docker compose start pocketbase
 # ✅ 복원 리허설 완료 (2026-XX-XX). 백업 zip → staging 복원 → admin/user/session row 일치 확인.
 ```
 
-### 7.5 PB file storage R2 전환 (S18-A, v1.1 미디어 준비)
+### 7.5 PB file storage GCS 전환 (S18-A, v1.1 미디어 준비)
 
-세션 미디어(사진/영상)를 PB가 R2에 저장하도록 file storage를 전환. 백업 (`auto/`)과 권한·prefix·lifecycle 정책을 격리해 사고 영향 최소화.
+세션 미디어(사진/영상)를 PB가 GCS에 저장하도록 file storage를 전환. 백업 버킷(`breakteau-backups`)과 권한·버킷·lifecycle 정책을 격리해 사고 영향 최소화.
 
 #### 7.5.1 미디어 버킷 생성
 
-§7.3.1과 동일 절차로 새 버킷 `breakteau-media` 생성 (Option Y 기준).
+```bash
+# §7.3.1과 동일하게 us-west1, Standard storage class.
+gcloud storage buckets create gs://breakteau-media \
+  --location=us-west1 \
+  --default-storage-class=STANDARD \
+  --uniform-bucket-level-access
+```
 
-**Default storage class** 드롭다운:
-- **Standard** (권장) — 자주 보는 미디어. $0.015/GB·월, Class A $4.50/M, Class B $0.36/M.
-- Infrequent Access — 거의 안 보는 archival용. 저장은 싸지만 ops 2배 + 30일 최소 보관 패널티.
+또는 GCP Console에서 동일 옵션으로 생성. **us-west1 (VM과 동일 region)**이 PB↔GCS 트래픽 무료의 핵심.
 
-> R2 무료 한도(월): Standard 10 GB storage / 1M Class A / 10M Class B / **egress 무료**. 개인 클라이밍 앱이면 한동안 $0 가능.
+미디어는 영구 보관이라 lifecycle 룰 적용 안 함.
 
-#### 7.5.2 미디어용 R2 access token 발급 (백업 토큰과 분리)
+#### 7.5.2 미디어용 service account + HMAC 키 (백업 SA와 분리)
 
-Cloudflare Dashboard → R2 → **Manage API Tokens** → **Create API token**:
-- Permission: **Object Read & Write**
-- Specify bucket:
-  - **Option X (단일 버킷 + prefix 격리, 권장)**: §7.3.1의 `breakteau-backups` 그대로 선택 + 토큰 권한 자체는 버킷 전체. PB가 객체를 `media/` prefix 아래에 둘 거라 *실질* 격리는 코드/PB 설정 측에서.
-  - **Option Y (별도 버킷, 더 강한 격리)**: 새 버킷 `breakteau-media` 생성 후 그것만 선택. 백업 토큰이 새도 미디어 0 영향, 역도 동일.
-- TTL: 만료 없음 (운영) 또는 1년 (보안 강화).
-- Generate → **Access Key ID / Secret / Account ID**를 1Password에 즉시 저장 (한 번만 표시).
+```bash
+# 1) media 전용 SA
+gcloud iam service-accounts create breakteau-media \
+  --display-name="Breakteau media storage"
 
-> 본 RUNBOOK 예시는 **Option Y (별도 버킷 `breakteau-media`)**를 가정. Option X로 가도 동일하게 prefix만 다르게 적용.
+# 2) media bucket에만 ObjectAdmin
+gcloud storage buckets add-iam-policy-binding gs://breakteau-media \
+  --member=serviceAccount:breakteau-media@<PROJECT_ID>.iam.gserviceaccount.com \
+  --role=roles/storage.objectAdmin
 
-#### 7.5.3 미디어 버킷 lifecycle 정책
+# 3) HMAC 키 발급
+gcloud storage hmac create breakteau-media@<PROJECT_ID>.iam.gserviceaccount.com
+# accessId / secret을 1Password에 저장 — PB Admin에 곧 입력.
+```
 
-미디어는 사용자가 명시적으로 삭제할 때까지 영구 보관 — **lifecycle 룰 없음**. 백업과 다른 점.
+백업 SA(`breakteau-backup`)는 `breakteau-backups`에만 권한, media SA는 `breakteau-media`에만 권한 → 한 키가 새도 다른 버킷 0 영향.
 
-#### 7.5.4 PB Admin UI에서 S3 file storage 활성
+#### 7.5.3 PB Admin UI에서 S3 file storage 활성
 
 PB Admin (`https://<PB_DOMAIN>/_/`) → 좌측 **Settings** → **Files** → **Use S3 storage** 토글:
 
 | 필드 | 값 |
 |---|---|
-| Endpoint | `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` |
-| Bucket | `breakteau-media` (Option Y) 또는 `breakteau-backups` (Option X) |
-| Region | `auto` |
-| Access key | 위에서 발급한 미디어 토큰 Access Key ID |
-| Secret | 위에서 발급한 Secret |
-| Force path style | **off** (R2 표준은 virtual-hosted style) |
+| Endpoint | `https://storage.googleapis.com` |
+| Bucket | `breakteau-media` |
+| Region | `us-west1` |
+| Access key | 위 §7.5.2에서 발급한 media HMAC `accessId` |
+| Secret | 위 §7.5.2 `secret` |
+| Force path style | **on** (GCS S3 호환은 path-style 권장) |
 
-**Save settings** → PB가 즉시 file 필드 업로드/다운로드를 R2로 라우팅 시작. 기존 로컬 디스크 (`pb_data/storage/`) 파일은 그대로 두지만 새 업로드만 R2로 감 — 신규 도입이라 마이그레이션 부담 없음.
+**Save settings** → PB가 즉시 file 필드 업로드/다운로드를 GCS로 라우팅 시작. 기존 로컬 디스크 (`pb_data/storage/`) 파일은 그대로 두지만 새 업로드만 GCS로 감 — 신규 도입이라 마이그레이션 부담 없음.
 
-#### 7.5.5 검증
+#### 7.5.4 검증
 
 PB Admin → 임의 컬렉션 (예: 임시 `_test` 컬렉션에 file 필드 추가) → 작은 이미지 1개 업로드 → Save:
 
 ```bash
 # 컨테이너 로그에서 S3 PUT이 보이면 OK:
-docker compose -f docker-compose.prod.yml logs --tail 30 pocketbase | grep -iE "s3|put"
+docker compose -f docker-compose.prod.yml logs --tail 30 pocketbase | grep -iE "s3|put|googleapis"
 ```
 
-R2 console (해당 버킷) → 객체 트리에서 `<collection_id>/<record_id>/<filename>` 경로로 도착했는지 확인.
+GCP Console → Buckets → `breakteau-media` → 객체 트리에서 `<collection_id>/<record_id>/<filename>` 경로로 도착했는지 확인. 또는:
 
-#### 7.5.6 PB → R2 cold-cache 영향
+```bash
+gcloud storage ls gs://breakteau-media/
+```
 
-PB는 file 응답에 short-lived 캐시를 두지만 R2 GET 자체는 첫 1회. 미디어 객체가 자주 access되면 PB 앞단 Caddy에 `Cache-Control` 설정 추가 검토 (별도 follow-up).
+#### 7.5.5 PB → GCS 트래픽 영향
+
+- **업로드/다운로드 (PB ↔ GCS)**: 같은 region(us-west1) — **무료**.
+- **사용자(한국) → PB → GCS**: 다운로드는 PB의 GCE egress로 계산($0.085-0.12/GB, 첫 1GB/월 무료). 1인 사용 + 짧은 영상 재생이면 월 $1 이하 전망.
+- 미디어 객체가 자주 access되면 PB 앞단 Caddy에 `Cache-Control` 설정 추가 검토 (별도 follow-up).
 
 ---
 

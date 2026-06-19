@@ -92,35 +92,41 @@
 
 ## ADR 6: 객체 스토리지 전략 (백업 + 미디어)
 
-* **상태:** 확정 (2026-06-17 결정 재변경 — GCS → R2, 미디어 적극 사용 의도 반영)
+* **상태:** 확정 (2026-06-19 결정 재변경 — R2 → GCS, R2 콘솔 실제 작동 불가 + 1인 운용 단계에서 비용 비교 우위 소실)
 * **컨텍스트:** 두 가지 사용처:
   1. **PB 백업** — 인스턴스/디스크 손실 대응. 일일 zip 업로드.
-  2. **세션 미디어 (v1.1 후보)** — 폼 코칭/AI 분석용 영상 첨부. 본인 폼을 **반복 재생하며 분석**하는 패턴 → 다운로드 egress가 누적적 변수.
+  2. **세션 미디어 (v1.1 후보)** — 폼 코칭/AI 분석용 영상 첨부. 본인 폼을 반복 재생하며 분석.
 
-  사용 패턴 차이가 결정 변수를 결정: 백업만이면 egress 거의 0이라 GCS가 보안 우세. **미디어 + 반복 재생이 들어가면 egress가 누적적이라 R2의 egress 무료가 우세.**
-* **결정:** **Cloudflare R2** + S3 호환 인터페이스.
-  * 백업: rclone S3 backend + R2 access key로 일일 zip 업로드.
-  * 미디어: PocketBase 0.22+ file storage native S3 호환 → 같은 R2 버킷(또는 별도) endpoint 지정.
-  * 30일 보관(백업) + 영구 보관(미디어, 사용자 명시적 삭제 시까지).
+  과거 결정(R2)은 미디어 egress 누적 0을 핵심 근거로 했으나, **(a) 운용 단계에서 R2 콘솔의 토큰/버킷 생성 흐름이 실제로 동작하지 않아** S18-A를 막아세웠고, **(b) 단일 사용자 운용에서 미디어 egress가 월 1-2GB 규모에 그쳐 GCS Always Free + 작은 초과분으로 충분**.
+* **결정:** **GCP Cloud Storage (GCS)** + S3 호환(Interoperability/HMAC) 인터페이스.
+  * **리전:** VM과 동일 `us-west1` (Standard storage class). VM↔GCS 같은 region 트래픽은 무료.
+  * **백업:** rclone S3 backend + GCS HMAC 키로 일일 zip 업로드 (`breakteau-backups`).
+  * **미디어 (v1.1):** PocketBase file storage S3 호환 → 별도 버킷(`breakteau-media`) endpoint 지정.
+  * **30일 보관**(백업) + 영구 보관(미디어, 사용자 명시적 삭제 시까지).
 * **근거:**
-  * **PB native S3 호환** — `endpoint=https://<account>.r2.cloudflarestorage.com` + access key 설정만으로 PB file 필드를 R2에 위임. 추가 upload proxy/Worker 불필요.
-  * **R2 egress 완전 무료 (어디서든)** — 한국 사용자가 폼 영상을 반복 재생해도 누적 비용 0. GCS 시 한국 us-west1 egress = 1GB/월 무료 후 ~$0.12/GB, 폼 코칭 적극 사용 시 연 $13-60 누적.
-  * **Free tier 10GB 저장** — 영상 30MB × 100세션 = ~3GB, 1년치 보관에 충분. 초과 시 ~$0.015/GB/월.
-  * **Class A/B 한도** — Class A 1M/월 + Class B 10M/월 무료. 우리 사용량 무관.
-  * **백업 + 미디어 단일 인증 체계** — 같은 R2 access key 한 쌍으로 양쪽 처리. GCS 시 백업은 SA metadata + 미디어는 HMAC keys 혼용 부담.
-* **검토 후 기각된 대안 (2026-06-17 재평가):**
-  * **GCS** *(직전 ADR-6 결정)* — 백업만 가정 시 SA metadata 인증으로 자격증명 노출 0이 강점이었으나 (1) PB file storage가 GCS S3 호환(XML API/HMAC keys)을 native 사용은 가능하지만 백업과 다른 인증 체계 혼용, (2) 한국 사용자의 영상 반복 재생 egress 과금 누적, (3) 폼 분석이 PRD의 궁극적 사용처라면 미디어 트래픽이 백업 대비 압도적으로 큼. **→ 미디어 적극 사용 시나리오에서 R2 우세.**
-  * **AWS S3 / Backblaze B2** — egress 과금(S3) 또는 추가 SaaS(B2). R2의 egress 무료 + 이미 Cloudflare 사용(ADR-3 검토에서는 기각이지만 이 ADR에서는 단일 객체저장소로 사용) 측면에서 부족.
-  * **백업 GCS / 미디어 R2 분리** — 두 곳 관리 부담 + 인증 체계 2종. 단일 사용자 운영 단계에서 over-engineering.
+  * **운용 가능성** — R2 콘솔의 일시적 장애가 셋업 자체를 차단. GCS 콘솔은 안정적으로 작동.
+  * **단일 GCP 콘솔 통합** — VM/네트워킹/IAM/Storage가 한 콘솔에서 모니터링/조작. 운영 인지 부담 ↓.
+  * **GCP 동일 리전 내부 트래픽 무료** — PB↔GCS는 same-region이면 egress 과금 없음 (업로드/다운로드).
+  * **PB S3 호환 — GCS Interoperability** — 활성화 후 HMAC 키 발급해 PB Settings → Files에 R2와 동일 형태(endpoint/access key/secret)로 주입.
+  * **백업 + 미디어 단일 인증 체계** — 양쪽 모두 GCS HMAC 한 쌍(또는 버킷별 분리) 사용. SA metadata 인증과 혼용 부담 없음.
+* **검토 후 기각된 대안 (2026-06-19 재평가):**
+  * **Cloudflare R2** *(직전 ADR-6 결정)* — egress 무료는 매력이나 콘솔 자체가 막힘. 1인 사용에서 GCS egress 월 비용은 무시 가능 수준(미디어 1-2GB → $0.15-0.24/월 또는 첫 1GB 무료). **→ 운용 가능성 + 비용 trivial이라 GCS 우세.**
+  * **AWS S3** — egress 과금 + 추가 콘솔 + IAM 학습 부담. GCP 콘솔 일원화 이점 손해.
+  * **Backblaze B2** — 추가 SaaS, GCP 콘솔 일원화 이점 손해.
   * **VM 같은 디스크 내 미디어 저장** — e2-micro 30GB 디스크에 영상 수GB 누적 → SQLite 공간 압박 + 인스턴스 손실 시 미디어도 동시 손실.
 * **트레이드오프:**
-  * **Cloudflare 종속 1개 추가** — ADR-2 "외부 종속 최소화" 원칙 일부 양보. 폼 분석이 본 앱의 궁극적 가치라면 미디어 egress 자유도가 그 양보의 비용을 정당화.
-  * **R2 access key 평문 환경변수** — backup 컨테이너 + PB file storage 양쪽 env에 `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` 노출. SA metadata 대안 없음. 보완: bucket-scoped 권한 + 별도 access key per 컨테이너.
-  * **GCS Always Free 폐기** — 같은 GCP 모니터링 콘솔 통합 손해. 운영 모니터링은 R2/CF console + GCP VM 콘솔 2곳 분산.
+  * **GCS egress (한국 user) 과금** — VM(us-west1) → 사용자(한국)로 나가는 트래픽은 GCE egress 적용($0.085-0.12/GB, 첫 1GB/월 무료). 1인 사용 시 월 $1 이하 전망. 트래픽 폭증 시 재평가 트리거.
+  * **HMAC 키 평문 환경변수** — backup 컨테이너 + PB file storage 양쪽 env에 access key/secret 노출. SA metadata 인증은 PB가 native 지원 안 함. 보완: bucket-scoped 권한 + 키 로테이션.
+  * **R2 egress 무료 이점 폐기** — 향후 사용자 확장 또는 영상 게시/공유 use case가 추가되면 GCS egress 누적이 부담될 수 있음. 그때 재평가.
 * **재평가 트리거:**
-  * 미디어 기능이 결국 v1.1에서 빠지고 백업만 운영 → GCS 재검토.
-  * R2 free tier 정책 변경 → 비용 추정 재계산.
-  * 미디어 월 다운로드 100GB 초과 → R2 초과분 과금(~$0.015/GB) vs CDN 캐시 도입 검토.
+  * 한국 user egress가 월 50GB 초과 → CDN(Cloudflare front of GCS, 또는 GCS CDN) 또는 R2 복귀 재검토.
+  * R2 콘솔 안정화 + 미디어 트래픽이 클 것으로 예상되는 시점.
+  * 사용자 수 증가 → SA-based 인증, IAM 분리, 비용 모니터링 재구성.
+
+### 이력
+- 2026-06-12: 초기 결정 GCS (백업만 가정, SA metadata 인증).
+- 2026-06-17: GCS → R2 변경 (미디어 적극 사용 + egress 누적 우려).
+- 2026-06-19: R2 → GCS 재변경 (R2 콘솔 작동 불가 + 1인 운용 단계 비용 trivial).
 
 ## ADR 7: 인터벌 타이머 안정성
 

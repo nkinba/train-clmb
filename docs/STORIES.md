@@ -14,7 +14,7 @@
 
 ### S02 — ADR 4–8 추가 ✅ (commit ec1e7ba, Ultraplan)
 **Goal:** plan에서 결정된 보강 결정을 ADR로 기록.
-**완료 상태:** ADR-4(PWA/오프라인 동기화), ADR-5(CORS/JWT 인증), ADR-6(R2 백업), ADR-7(인터벌 타이머 안정성 Wake Lock/Audio/Vibration), ADR-8(GCP region us-west1) 추가 완료. 본 워크플로우 도입 전 작업이라 review 파일은 없음.
+**완료 상태:** ADR-4(PWA/오프라인 동기화), ADR-5(CORS/JWT 인증), ADR-6(객체 스토리지 — 2026-06-19 GCS로 갱신), ADR-7(인터벌 타이머 안정성 Wake Lock/Audio/Vibration), ADR-8(GCP region us-west1) 추가 완료. 본 워크플로우 도입 전 작업이라 review 파일은 없음.
 
 ### S03 — 디자인 토큰 + Stitch 프롬프트 ✅
 **Goal:** UI.md의 결정·와이어프레임을 기반으로 디자인 토큰을 문서화하고, Stitch에 넣을 화면별 prompt를 작성한다. (Visual mock 생성은 사용자가 Stitch에서 직접 수행.)
@@ -241,15 +241,15 @@
 - [ ] `curl -w "%{time_total}"` 한국에서 측정 기록
 
 ### S14 — PocketBase 자동 백업 ✅
-**Goal:** SQLite + uploads를 Cloudflare R2로 일 1회 백업.
+**Goal:** SQLite + uploads를 GCS로 일 1회 백업 (ADR-6 2026-06-19 갱신: R2 → GCS).
 **Dependencies:** S13
 **Tasks:**
 - 컨테이너 cron 또는 systemd timer
-- `pb_data` 압축 → rclone → R2
-- 30일 보관 정책
+- `pb_data` 압축 → rclone (S3 호환, provider=GCS, HMAC 키) → GCS
+- 30일 보관 정책 (GCS lifecycle + rclone --min-age 이중 안전망)
 - 복원 리허설 1회 (별도 인스턴스로 복원 후 검증)
 **Acceptance Criteria:**
-- [ ] 백업 객체가 R2에 존재
+- [ ] 백업 객체가 GCS에 존재
 - [ ] 복원 절차 `docs/RUNBOOK.md`에 문서화
 
 ### S15 — VM Caddy 정적 서빙 + 배포 파이프라인 ✅
@@ -290,7 +290,7 @@
 - localStorage 키 prefix: `bt:` (이전 `cf:`)
 - 컨테이너/이미지: `breakteau-pb` / `breakteau-pocketbase:<v>` / `breakteau-caddy` / `breakteau-backup:s14`
 - 경로 예시: `/opt/breakteau/...`
-- R2 버킷 예시: `breakteau-backups` / `breakteau-media`
+- GCS 버킷 예시: `breakteau-backups` / `breakteau-media`
 - 도메인 예시: `pb.breakteau.example.com` / `app.breakteau.example.com`
 - SW 캐시: `breakteau-shell-`
 **Tasks:**
@@ -309,21 +309,21 @@
 
 ### S18 — 세션 미디어 (사진/영상 첨부) ⬜
 **Goal:** PRD §8의 폼 코칭/AI 분석 후보 — 본인 영상을 세션에 첨부, 반복 재생.
-**Dependencies:** S08 (세션 관리), ADR-6 (R2 객체 스토리지).
+**Dependencies:** S08 (세션 관리), ADR-6 (GCS 객체 스토리지, 2026-06-19 갱신).
 **분할:** A (인프라) → B (컬렉션·업로드) → C (재생·라이브러리).
 
-#### S18-A — R2 file storage 인프라 전환 🔄
-**Goal:** PB file storage를 R2로 전환 + 미디어 토큰을 백업 토큰과 격리.
-**Dependencies:** S14 (R2 백업) ✅
+#### S18-A — GCS file storage 인프라 전환 🔄
+**Goal:** PB file storage를 GCS로 전환 + 미디어 SA/HMAC를 백업 SA와 격리.
+**Dependencies:** S14 (GCS 백업) ✅
 **Tasks:**
-- RUNBOOK §7.5 추가: PB Admin UI → Settings → Files → S3 storage 활성 + 미디어 prefix 설정 절차.
-- 미디어용 R2 API 토큰 별도 발급 (`media/` prefix 한정 또는 별도 버킷). 사용자 위임.
-- `.env.prod.example`에 미디어 자격증명 placeholder 추가 (PB는 admin UI로 설정하지만 ops 1Password 보관용 envvar 명시).
-- 검증: PB admin에서 테스트 이미지 1개 업로드 → R2 console에서 객체 확인.
+- RUNBOOK §7.5: PB Admin UI → Settings → Files → S3 storage 활성 + GCS endpoint(`storage.googleapis.com`) 설정 절차.
+- 미디어용 SA + HMAC 별도 발급 (`breakteau-media` 버킷 전용). 사용자 위임.
+- `.env.prod.example`에 `MEDIA_GCS_*` placeholder 추가 (PB admin UI 입력값을 1Password와 함께 보관용 메타데이터).
+- 검증: PB admin에서 테스트 이미지 1개 업로드 → GCS console / `gcloud storage ls`에서 객체 확인.
 **Acceptance Criteria:**
-- [ ] RUNBOOK §7.5 절차로 PB가 R2를 file storage로 사용
-- [ ] 백업 토큰과 미디어 토큰이 권한·prefix·lifecycle 정책 측에서 격리됨
-- [ ] PB admin에서 업로드한 테스트 파일이 R2 `media/` (또는 별도 버킷)에 도착
+- [ ] RUNBOOK §7.5 절차로 PB가 GCS를 file storage로 사용
+- [ ] 백업 SA(`breakteau-backup`)와 미디어 SA(`breakteau-media`)가 버킷·권한 측에서 격리됨
+- [ ] PB admin에서 업로드한 테스트 파일이 `breakteau-media` 버킷에 도착
 
 #### S18-B — 미디어 컬렉션 + 업로드 흐름 ⬜
 **Goal:** PB `media` 컬렉션 + 모바일 file input + 진행률 표시.
@@ -344,7 +344,7 @@
 - `/logs/detail`에 첨부 그리드 + lightbox/`<video controls>`.
 - `/library` 신규 라우트 (날짜별 그룹 + 검색).
 **Acceptance Criteria:**
-- [ ] 세션 상세에서 영상 재생 (R2 egress 0)
+- [ ] 세션 상세에서 영상 재생 (PB ↔ GCS same-region 무료, 사용자 egress 1GB/월 무료 한도 내)
 - [ ] /library에서 전체 미디어 일람
 
 **Out of scope (v1.2+):**
@@ -375,6 +375,6 @@ S08, S13 → S18
 5. **Phase 4 v1.1 (진행)**:
    - S16 (분석) ✅
    - S23 (현재 세션 timeline) ✅
-   - S18 (세션 미디어 — R2 file storage) ⬜ ← 다음 (S18-A 인프라부터)
+   - S18 (세션 미디어 — GCS file storage) ⬜ ← 다음 (S18-A 인프라부터)
    - S21 (지도 SDK, 선택)
    - ~~S17 음성 메모 (취소)~~

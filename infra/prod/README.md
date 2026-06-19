@@ -30,7 +30,7 @@ internet ──443──> caddy (public + internal)
 
 - `docker-compose.prod.yml` — compose 정의
 - `Caddyfile` — reverse proxy + TLS + 보안 헤더
-- `.env.prod.example` — PB_DOMAIN/APP_DOMAIN, ACME_EMAIL, DATA_DIR, R2/PB_ADMIN 템플릿
+- `.env.prod.example` — PB_DOMAIN/APP_DOMAIN, ACME_EMAIL, DATA_DIR, GCS/PB_ADMIN 템플릿
 - `.env` *(gitignore)* — 실제 값
 - `data/` *(gitignore)* — pb_data + caddy 인증서
 
@@ -75,7 +75,7 @@ docker compose -f docker-compose.prod.yml up -d --build
   ```
   적용 시점: 도메인 발급 + 첫 admin 로그인 직후 (자기 자신을 막지 않도록 IP 확정 후).
 - **swap 2GB**: e2-micro RAM 1GB라 빌드/마이그레이션 시 OOM 가능. RUNBOOK §2.1 참조.
-- **백업 + 미디어 객체 스토리지**: 자동 일일 백업이 `backup` 컨테이너에서 R2 `auto/` prefix로 업로드. v1.1에서 PB file storage가 같은 R2의 `media/` prefix(또는 별도 버킷)로 사진/영상 저장. RUNBOOK §7.3.
+- **백업 + 미디어 객체 스토리지**: ADR-6 (2026-06-19 갱신) — 자동 일일 백업이 GCS `breakteau-backups/auto/`로 업로드. v1.1에서 PB file storage가 별도 GCS 버킷(`breakteau-media`)으로 사진/영상 저장. 백업/미디어 별 SA + HMAC 격리. RUNBOOK §7.3, §7.5.
 
 ## 변경 영향
 
