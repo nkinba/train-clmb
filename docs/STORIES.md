@@ -201,6 +201,20 @@
 - [x] 로딩 중에는 skeleton chip 표시, 에러 시 직접 입력 fallback hint
 - [x] 기존 acceptance criteria (검색 / 직접 입력 / MRU / 48dp) 회귀 없음
 
+### S25 — 활성 세션 timeline 미디어 row UX 보강 ✅
+**Goal:** /sessions/active timeline의 미디어 row를 클릭 가능하게 만들어 lightbox로 재생 + inline 썸네일로 시각적 식별.
+**Dependencies:** S23 ✅, S18-C ✅
+**Tasks:**
+- `TimelineRow`가 media kind일 때 button + onClick → 페이지 레벨 lightbox 활성화.
+- icon 자리에 작은 썸네일 (사진은 thumbnail, 영상은 첫 프레임 + Play 오버레이 mini).
+- 페이지 하단에 `MediaLightbox` 마운트, state는 `lightboxMedia: MediaRecord | null`.
+- 운동 row 편집/삭제는 본 Story 범위 외 (별도).
+**Acceptance Criteria:**
+- [x] 미디어 row 탭 → lightbox 열림 + 영상/이미지 재생
+- [x] 미디어 row의 icon 자리에 작은 썸네일 (영상은 Play 오버레이)
+- [x] 기존 운동 row (Link로 모듈 이동)는 회귀 없음
+- [x] 빈 토큰일 때 skeleton
+
 ### S23 — 현재 세션 페이지 재구조화 ✅
 **Goal:** 활성 세션 화면에서 행보드/등반/보조근력 카드를 메인 노출에서 빼고, "+ 운동 추가" 단일 버튼으로 모듈 선택을 한 단계 숨김. 대신 그 자리에 현 세션 동안 입력된 운동 항목들이 시간순으로 나열되는 timeline을 노출.
 **Dependencies:** S08 ✅, S09-S11 ✅

@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Dumbbell, Hand, Image as ImageIcon, Mountain, Plus, Timer, Video, type LucideIcon } from "lucide-react";
 import { AddModuleSheet } from "@/components/add-module-sheet";
+import { MediaLightbox } from "@/components/media-lightbox";
 import { MediaUploadSheet } from "@/components/media-upload-sheet";
 import { NumberStepper } from "@/components/number-stepper";
 import { PainSelector } from "@/components/pain-selector";
+import { mediaFileUrl, useFileToken, type MediaRecord } from "@/lib/media";
 import {
   getActiveSessionId,
   setActiveSessionId,
@@ -43,8 +45,10 @@ export default function ActiveSessionPage() {
   const sessionQuery = useSession(activeId);
   const endSession = useEndSession(activeId);
   const timeline = useActiveSessionLogs(activeId);
+  const fileToken = useFileToken();
   const [addOpen, setAddOpen] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
+  const [lightboxMedia, setLightboxMedia] = useState<MediaRecord | null>(null);
 
   // PB에서 해당 ID가 404면 localStorage가 stale — 정리 후 새 세션 폼으로.
   // (다른 디바이스에서 종료했거나 admin UI에서 삭제된 경우.)
@@ -171,13 +175,21 @@ export default function ActiveSessionPage() {
             </button>
           </div>
 
-          <Timeline timeline={timeline} />
+          <Timeline
+            timeline={timeline}
+            fileToken={fileToken.data}
+            onMediaClick={setLightboxMedia}
+          />
 
           <AddModuleSheet open={addOpen} onClose={() => setAddOpen(false)} />
           <MediaUploadSheet
             open={mediaOpen}
             onClose={() => setMediaOpen(false)}
             sessionId={session.id}
+          />
+          <MediaLightbox
+            media={lightboxMedia}
+            onClose={() => setLightboxMedia(null)}
           />
 
           {!showEndForm && (
@@ -288,8 +300,12 @@ const KIND_ICON: Record<TimelineKind, LucideIcon> = {
 
 function Timeline({
   timeline,
+  fileToken,
+  onMediaClick,
 }: {
   timeline: ReturnType<typeof useActiveSessionLogs>;
+  fileToken: string | undefined;
+  onMediaClick: (media: MediaRecord) => void;
 }) {
   if (timeline.isLoading && timeline.entries.length === 0) {
     return (
@@ -321,7 +337,12 @@ function Timeline({
       ) : (
         <ol reversed className="flex flex-col gap-2">
           {timeline.entries.map((e) => (
-            <TimelineRow key={`${e.kind}-${e.id}`} entry={e} />
+            <TimelineRow
+              key={`${e.kind}-${e.id}`}
+              entry={e}
+              fileToken={fileToken}
+              onMediaClick={onMediaClick}
+            />
           ))}
         </ol>
       )}
@@ -329,18 +350,33 @@ function Timeline({
   );
 }
 
-function TimelineRow({ entry }: { entry: TimelineEntry }) {
+function TimelineRow({
+  entry,
+  fileToken,
+  onMediaClick,
+}: {
+  entry: TimelineEntry;
+  fileToken: string | undefined;
+  onMediaClick: (media: MediaRecord) => void;
+}) {
+  const isMedia = entry.kind === "media" && entry.media;
   const Icon =
     entry.kind === "media" && entry.media?.kind === "video"
       ? Video
       : KIND_ICON[entry.kind];
   const route = routeOfKind(entry.kind);
 
+  const thumb = isMedia ? (
+    <MediaThumb media={entry.media!} token={fileToken} />
+  ) : (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-elevated text-fg-primary">
+      <Icon size={18} aria-hidden />
+    </span>
+  );
+
   const inner = (
     <>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-elevated text-fg-primary">
-        <Icon size={18} aria-hidden />
-      </span>
+      {thumb}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2">
           <p className="text-bodyLg font-semibold text-fg-primary">
@@ -372,10 +408,67 @@ function TimelineRow({ entry }: { entry: TimelineEntry }) {
       </li>
     );
   }
+  if (isMedia) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={() => onMediaClick(entry.media!)}
+          aria-label={entry.media!.kind === "video" ? "영상 보기" : "사진 보기"}
+          className="flex w-full items-center gap-3 rounded-lg bg-surface p-3 text-left hover:bg-elevated"
+        >
+          {inner}
+        </button>
+      </li>
+    );
+  }
   return (
     <li className="flex items-center gap-3 rounded-lg bg-surface p-3">
       {inner}
     </li>
+  );
+}
+
+function MediaThumb({
+  media,
+  token,
+}: {
+  media: MediaRecord;
+  token: string | undefined;
+}) {
+  if (!token) {
+    return (
+      <span className="block h-9 w-9 shrink-0 animate-pulse rounded-md bg-elevated" />
+    );
+  }
+  const url = mediaFileUrl(media, token);
+  return (
+    <span className="relative block h-9 w-9 shrink-0 overflow-hidden rounded-md bg-elevated">
+      {media.kind === "video" ? (
+        <video
+          src={url}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+        >
+          <track kind="captions" />
+        </video>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
+      )}
+      {media.kind === "video" && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30">
+          <Video size={14} aria-hidden className="text-fg-primary drop-shadow" />
+        </span>
+      )}
+    </span>
   );
 }
 
