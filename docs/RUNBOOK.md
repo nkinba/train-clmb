@@ -70,6 +70,51 @@ gcloud compute instances add-access-config breakteau-pb \
 
 ⚠️ Static IP를 reserve해두고 **할당된 VM이 없으면 시간당 과금** 시작. VM을 영구 삭제할 때는 같이 `gcloud compute addresses delete breakteau-pb-ip --region=us-west1` 호출.
 
+### 1.5 OS Login 활성화 (선택, 다중 운영자/보안 강화 시 권장)
+
+기본 `gcloud compute ssh`는 **메타데이터 기반 SSH 키 + 클라이언트의 로컬 `whoami`로 Linux user 생성**. 한 VM에 여러 운영자(예: 본인 노트북 + Cloud Shell)가 접속하면 username이 달라져 디렉토리 ownership이 갈라짐 (예: `/opt/breakteau`는 `ysc9606`인데 `/opt/breakteau/data/app`은 `yoonsoochang`).
+
+**OS Login**은 GCP IAM이 SSH 인증을 통합 관리 — 이메일 → Linux user 매핑 일관, 키 회수도 IAM에서 즉시 가능.
+
+#### 활성화
+
+```bash
+# 프로젝트 전체에 OS Login 적용
+gcloud compute project-info add-metadata --metadata enable-oslogin=TRUE
+
+# 본인 계정에 OS Login 사용자 권한 부여
+gcloud projects add-iam-policy-binding plateau-499712 \
+  --member="user:ysc9606@gmail.com" \
+  --role="roles/compute.osLogin"
+
+# 기존 metadata 기반 SSH key 정리 (선택 — 두 방식 공존 가능하지만 일관성 위해)
+gcloud compute project-info remove-metadata --keys=ssh-keys
+```
+
+#### 동작 확인
+
+```bash
+# 어디서 접속해도 동일 username으로 들어가야 함:
+gcloud compute ssh breakteau-pb --zone=us-west1-a --command='whoami'
+# → ysc9606_gmail_com  (이메일에서 _ 변환된 형태)
+```
+
+#### Trade-off
+
+- **장점**: 일관 user / IAM 통합 / 키 회수 즉시 / audit log
+- **단점**: 추가 IAM role 필요 / 단일 운영자에겐 약간 over-engineering
+- **현 단계 권장**: 단일 운영자면 §1.5 생략 가능. 두 번째 운영자 추가 시 또는 OWNER 외 계정에 SSH 권한 부여 시점에 켜는 게 자연스러움.
+
+#### 기존 디렉토리 owner 분산을 정리하려면
+
+```bash
+gcloud compute ssh breakteau-pb --zone=us-west1-a --command='
+sudo chown -R $(whoami):$(whoami) /opt/breakteau
+sudo chown -R 100:101 /opt/breakteau/data/pb_data
+sudo chown -R root:root /opt/breakteau/data/caddy_data /opt/breakteau/data/caddy_config
+'
+```
+
 ---
 
 ## 2. VM 초기 설정
