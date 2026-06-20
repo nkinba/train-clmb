@@ -78,6 +78,21 @@ gcloud compute instances add-access-config breakteau-pb \
 
 ### 2.1 swap 2GB (e2-micro 1GB RAM 대응)
 
+**왜 필요한가:** e2-micro는 RAM 1GB. steady state로 Linux+Docker+PB+Caddy+backup이 약 500MB 점유, 여유 500MB가 다음 **transient spike**에 부족:
+
+- `docker compose up --build` — PB/Caddy 이미지 빌드 시 일시적으로 500MB+
+- PB `POST /api/backups` — pb_data 전체(DB + uploads) 압축 시 메모리 피크 (미디어 누적 시 ↑)
+- SQLite VACUUM / WAL checkpoint, 마이그레이션 다수 record 변환
+- rsync 수신 중 file system 캐시 압력
+
+이 spike가 RAM 한계를 넘으면 **Linux OOM killer가 가장 큰 프로세스(보통 PB)를 SIGKILL** → 사이트 down + WAL 미체크포인트로 SQLite 손상 위험.
+
+**swap 2GB의 역할:**
+- spike 시 LRU 페이지를 disk로 내려 RAM 확보 → OOM 회피
+- steady state에선 swap 거의 안 씀(`free -h`의 used ~0)
+- "5초 swap I/O 페널티" vs "PB 프로세스 강제 종료" trade-off에서 후자 회피가 압도적 우세
+- 디스크 30GB 중 2GB는 보험료 ≈ 0
+
 ```bash
 sudo fallocate -l 2G /swapfile
 sudo chmod 600 /swapfile
@@ -86,6 +101,8 @@ sudo swapon /swapfile
 echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
 free -h
 ```
+
+**점검 시점**: 주 1회 `free -h`로 `Swap: used`가 100MB+ 지속되면 RAM 부족 신호 → 머신 타입 업그레이드(e2-small 등) 검토. 평소 0~수십MB 수준이 정상.
 
 ### 2.2 Docker + Compose
 
