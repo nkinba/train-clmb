@@ -1,8 +1,13 @@
-# Breakteau — Implementation Stories
+# Breakteau — Implementation Stories (Prototype, 2026-06-22 종료)
+
+> 🔒 **Prototype catalog — Phase 0–4 종료 시점에 freeze**.
+> v1.0부터는 `docs/stories/v1.0.md` 등 버전별 신규 파일로 작성한다 (`docs/DOCS_GUIDE.md` §2.3 참조).
+> 본 파일은 prototype 단계의 작업 카탈로그 archive — 신규 Story 추가 금지.
+> 후속 작업(S21 지도 SDK, 운동 row 편집, 영상 thumbnail 등)은 새 catalog로 이관.
 
 각 Story는 **구현 → 리뷰 → 수정 → 커밋** 워크플로우 1회 분량. 워크플로우 절차는 `CLAUDE.md` 참조.
 
-상태 표기: `⬜ Todo` / `🔄 In Progress` / `✅ Done` / `⏸ Blocked`
+상태 표기: `⬜ Todo` / `🔄 In Progress` / `✅ Done` / `⏸ Blocked` / `❌ Cancelled`
 
 ---
 
