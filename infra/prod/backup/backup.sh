@@ -73,11 +73,22 @@ if ! curl -fsS -X POST "${PB_INTERNAL_URL}/api/backups" \
   exit 1
 fi
 
-# ── 3) 다운로드
+# ── 3a) file-token 발급 (PB 0.22.x backup download endpoint는 admin token이 아닌
+#       short-lived file-token을 쿼리 파라미터로 요구. admin auth로 발급.)
+log "fetch file-token"
+FT_RESP=$(curl -sS -X POST "${PB_INTERNAL_URL}/api/files/token" \
+  -H "Authorization: ${TOKEN}")
+FILE_TOKEN=$(echo "$FT_RESP" | jq -r '.token // empty')
+if [ -z "$FILE_TOKEN" ] || [ "$FILE_TOKEN" = "null" ]; then
+  log "ERROR: file-token fetch failed — response: $(echo "$FT_RESP" | head -c 200)"
+  notify_failure "file-token" "see logs"
+  exit 1
+fi
+
+# ── 3b) 다운로드 (?token=<file-token>로 인증)
 log "download ${BACKUP_NAME}"
 curl -fsSL -o "${TMP_DIR}/${BACKUP_NAME}" \
-  -H "Authorization: ${TOKEN}" \
-  "${PB_INTERNAL_URL}/api/backups/${BACKUP_NAME}"
+  "${PB_INTERNAL_URL}/api/backups/${BACKUP_NAME}?token=${FILE_TOKEN}"
 
 if [ ! -s "${TMP_DIR}/${BACKUP_NAME}" ]; then
   log "ERROR: empty backup zip"
