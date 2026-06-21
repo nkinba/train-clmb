@@ -149,6 +149,14 @@ free -h
 
 **점검 시점**: 주 1회 `free -h`로 `Swap: used`가 100MB+ 지속되면 RAM 부족 신호 → 머신 타입 업그레이드(e2-small 등) 검토. 평소 0~수십MB 수준이 정상.
 
+### 2.1.5 rsync (프론트 배포 의존성)
+
+Debian 12 minimal cloud image에는 `rsync`가 없음 — §8의 rsync 배포(로컬·GitHub Actions 둘 다)가 "command not found"로 실패. 미리 설치:
+
+```bash
+sudo apt-get install -y rsync
+```
+
 ### 2.2 Docker + Compose
 
 ```bash
