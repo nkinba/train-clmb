@@ -75,7 +75,9 @@
 		# PB API 호출은 https://{$PB_DOMAIN}로 — connect-src에 추가.
 		# 'unsafe-inline' (script-src/style-src) — Next.js RSC payload + 동적 style 때문에 불가피.
 		#   hash 기반 CSP로 좁히려면 빌드 시점 hash 추출 필요 (v1.1 검토).
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://{$PB_DOMAIN}; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		# img-src/media-src에 PB origin 포함 — 미디어(사진/영상)는 PB file URL에서 로드.
+		# v1.1 follow-up: GCS 직접 URL을 사용하게 되면 추가 origin 등록 필요.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$PB_DOMAIN}; media-src 'self' blob: https://{$PB_DOMAIN}; connect-src 'self' https://{$PB_DOMAIN}; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 		-Server
 	}
 
